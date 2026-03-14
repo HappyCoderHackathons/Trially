@@ -10,7 +10,7 @@ export default function Home() {
 
   const handleSearch = (query: string) => {
     if (query.trim()) {
-      router.push(`/results?q=${encodeURIComponent(query)}`)
+      router.push(`/chat?q=${encodeURIComponent(query)}`)
     }
   }
 

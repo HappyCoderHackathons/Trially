@@ -854,7 +854,7 @@ export const handler = async (event) => {
       search.set("pageToken", String(requestedPageToken));
     }
 
-    const url = `${BASE_URL}/studies?${search.toString()}`;
+   const url = `${BASE_URL}/studies?${search.toString()}`;
 
     const res = await fetch(url, {
       method: "GET",

@@ -89,6 +89,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/HappyCoderHackathons/Trially/issues"
   },

@@ -1,20 +1,34 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Paperclip, Mic, Send } from "lucide-react"
+import { Paperclip, Mic, Send, X } from "lucide-react"
 
 interface ChatInputProps {
-  onSend: (message: string) => void
+  onSend: (message: string, files: File[]) => void
   disabled?: boolean
 }
 
 export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   const [inputValue, setInputValue] = useState("")
   const [isRecording, setIsRecording] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileClick = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) {
+      setSelectedFiles([])
+      return
+    }
+    setSelectedFiles(Array.from(files))
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleAudioClick = () => {
@@ -30,13 +44,39 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 
   const handleSend = () => {
     if (inputValue.trim() && !disabled) {
-      onSend(inputValue.trim())
+      onSend(inputValue.trim(), selectedFiles)
       setInputValue("")
+      setSelectedFiles([])
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-2">
+      {selectedFiles.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selectedFiles.map((file, index) => (
+            <span
+              key={`${file.name}-${index}`}
+              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-sm text-muted-foreground"
+            >
+              <span className="max-w-[180px] truncate" title={file.name}>
+                {file.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeFile(index)}
+                className="rounded-full p-0.5 hover:bg-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label={`Remove ${file.name}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="relative flex items-center bg-primary rounded-full px-2 py-2 shadow-lg">
         {/* File Upload Button */}
         <button
@@ -53,6 +93,8 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
           ref={fileInputRef}
           className="hidden"
           accept=".pdf,.doc,.docx,.txt,.jpg,.png"
+          multiple
+          onChange={handleFileChange}
         />
 
         {/* Text Input */}

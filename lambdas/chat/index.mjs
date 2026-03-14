@@ -13,7 +13,6 @@ function getRequestBody(event) {
 
 export const handler = async (event) => {
   try {
-    // Handle CORS preflight without requiring a body
     const method =
       event?.httpMethod ??
       event?.requestContext?.http?.method ??
@@ -60,7 +59,6 @@ export const handler = async (event) => {
     };
   } catch (err) {
     console.error("Chat Lambda error:", err);
-
     return {
       statusCode: 500,
       headers: {

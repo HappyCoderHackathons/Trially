@@ -8,7 +8,9 @@ import { ArrowLeft } from "lucide-react"
 import { ChatMessage } from "@/components/chat-message"
 import { ChatInput } from "@/components/chat-input"
 import { BackgroundDecorations } from "@/components/background-decorations"
-import { sendChatMessage } from "@/lib/chat-api"
+
+import { useConversation } from '@elevenlabs/react';
+
 
 interface Message {
   id: string
@@ -21,104 +23,105 @@ export default function ChatPage() {
   const searchParams = useSearchParams()
   const initialQuery = searchParams.get("q") || ""
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  
+  const initialQuerySent = useRef(false)
+
   const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
+
 
   const getCurrentTime = () => {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Initialize with user's initial query and send it to the chat service
-  useEffect(() => {
-    const run = async () => {
-      if (!initialQuery || messages.length > 0) return
-
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        content: initialQuery,
-        sender: "user",
-        timestamp: getCurrentTime(),
-      }
-      setMessages([userMessage])
-
-      try {
-        setIsTyping(true)
-        const reply = await sendChatMessage(initialQuery, [
-          { role: "user", content: initialQuery },
-        ])
-        const aiMessage: Message = {
-          id: crypto.randomUUID(),
-          content: reply,
-          sender: "ai",
-          timestamp: getCurrentTime(),
-        }
-        setMessages((prev) => [...prev, aiMessage])
-      } catch {
-        const errorMessage: Message = {
-          id: crypto.randomUUID(),
-          content:
-            "Sorry, something went wrong while contacting the Trially assistant. Please try again.",
-          sender: "ai",
-          timestamp: getCurrentTime(),
-        }
-        setMessages((prev) => [...prev, errorMessage])
-      } finally {
+  //Create Conversation with Error Handling
+  const conversation = useConversation({
+    textOnly: true,
+    onMessage: ({ message, source }) => {
+      if (source === "ai") {
         setIsTyping(false)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            content: message,
+            sender: "ai",
+            timestamp: getCurrentTime(),
+          },
+        ])
+      }
+    },
+    onError: () => {
+      setIsTyping(false)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          content: "Sorry, something went wrong with the Trially assistant. Please try again.",
+          sender: "ai",
+          timestamp: getCurrentTime(),
+        },
+      ])
+    },
+  })
+
+  // Connect to ElevenLabs on mount
+  useEffect(() => {
+    async function connect() {
+      try {
+        const { signed_url } = await fetch("/api/signed-url").then((r) => r.json())
+        await conversation.startSession({
+          signedUrl: signed_url,
+          connectionType: "websocket",
+        })
+      } catch (err) {
+        console.error("Failed to connect to agent:", err)
       }
     }
+    connect()
+    return () => {
+      conversation.endSession()
+    }
+  }, [])
 
-    void run()
-  }, [initialQuery, messages.length])
 
-  // Auto-scroll to bottom when new messages arrive
+    // Send initial query once session is connected
+  useEffect(() => {
+    if (
+      conversation.status === "connected" &&
+      initialQuery &&
+      !initialQuerySent.current
+    ) {
+      initialQuerySent.current = true
+      setMessages([
+        {
+          id: crypto.randomUUID(),
+          content: initialQuery,
+          sender: "user",
+          timestamp: getCurrentTime(),
+        },
+      ])
+      setIsTyping(true)
+      conversation.sendUserMessage(initialQuery)
+    }
+  }, [conversation.status, initialQuery])
+
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
-  const handleSendMessage = async (content: string) => {
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content,
-      sender: "user",
-      timestamp: getCurrentTime(),
-    }
-    setMessages((prev) => [...prev, userMessage])
-
-    try {
-      setIsTyping(true)
-
-      const history = [
-        ...messages.map((m) => ({
-          role: (m.sender === "user" ? "user" : "assistant") as
-            | "user"
-            | "assistant",
-          content: m.content,
-        })),
-        { role: "user" as const, content },
-      ]
-
-      const reply = await sendChatMessage(content, history)
-
-      const aiMessage: Message = {
+  const handleSendMessage = (content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
         id: crypto.randomUUID(),
-        content: reply,
-        sender: "ai",
+        content,
+        sender: "user",
         timestamp: getCurrentTime(),
-      }
-      setMessages((prev) => [...prev, aiMessage])
-    } catch {
-      const errorMessage: Message = {
-        id: crypto.randomUUID(),
-        content:
-          "Sorry, something went wrong while contacting the Trially assistant. Please try again.",
-        sender: "ai",
-        timestamp: getCurrentTime(),
-      }
-      setMessages((prev) => [...prev, errorMessage])
-    } finally {
-      setIsTyping(false)
-    }
+      },
+    ])
+    setIsTyping(true)
+    conversation.sendUserMessage(content)
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { Suspense, useState, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -115,7 +115,7 @@ const mockTrials: Trial[] = [
 
 const ITEMS_PER_PAGE = 4
 
-export default function ResultsPage() {
+function ResultsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const query = searchParams.get("q") || ""
@@ -228,5 +228,17 @@ export default function ResultsPage() {
       {/* Bottom gradient */}
       <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
     </main>
+  )
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex flex-col bg-background items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </main>
+    }>
+      <ResultsPageContent />
+    </Suspense>
   )
 }

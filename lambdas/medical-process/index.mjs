@@ -77,17 +77,21 @@ export const handler = async (event) => {
   const now = new Date().toISOString();
   const inputStr = toStoreValue(body.input);
   const resultStr = toStoreValue(body.result);
+  const patientStr = body.patient != null ? toStoreValue(body.patient) : "";
+
+  const item = {
+    id: { S: id },
+    createdAt: { S: now },
+    input: { S: inputStr },
+    result: { S: resultStr },
+  };
+  if (patientStr) item.patient = { S: patientStr };
 
   try {
     await dynamo.send(
       new PutItemCommand({
         TableName: TABLE_NAME,
-        Item: {
-          id: { S: id },
-          createdAt: { S: now },
-          input: { S: inputStr },
-          result: { S: resultStr },
-        },
+        Item: item,
       })
     );
   } catch (err) {
@@ -95,5 +99,5 @@ export const handler = async (event) => {
     return response(500, { error: "Failed to store result", details: String(err) });
   }
 
-  return response(200, { id, createdAt: now, stored: true });
+  return response(200, { id, createdAt: now, stored: true, patientStored: Boolean(patientStr) });
 };

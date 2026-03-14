@@ -292,9 +292,11 @@ export const handler = async (event) => {
     }
 
     console.error("Unexpected error:", error);
+    const errMessage = error?.message ?? String(error);
     return buildResponse(500, {
       status:  "error",
       message: "Internal server error.",
+      details: errMessage,
     });
   }
 };

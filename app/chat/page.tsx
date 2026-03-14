@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft } from "lucide-react"
 import { ChatMessage } from "@/components/chat-message"
 import { ChatInput } from "@/components/chat-input"
 import { BackgroundDecorations } from "@/components/background-decorations"
+import { sendChatMessage } from "@/lib/chat-api"
 
 interface Message {
   id: string
@@ -16,102 +17,108 @@ interface Message {
   timestamp: string
 }
 
-// Simulated AI clarifying questions based on context
-const clarifyingQuestions = [
-  "Thank you for reaching out! To help find the best clinical trials for you, I have a few questions. First, could you tell me more about your current diagnosis or the condition you're seeking treatment for?",
-  "That's helpful information. What treatments have you tried so far, if any? This helps me understand what options might be most relevant for you.",
-  "Got it. Are you looking for trials in a specific geographic location, or are you open to traveling for the right opportunity?",
-  "One more question - do you have any preferences regarding the phase of clinical trials? Phase 1 trials test safety, Phase 2 tests effectiveness, and Phase 3 compares to standard treatments.",
-  "Perfect! Based on your responses, I'm now searching for clinical trials that match your criteria. Let me find the most relevant options for you..."
-]
-
 export default function ChatPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const initialQuery = searchParams.get("q") || ""
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
-  const [questionIndex, setQuestionIndex] = useState(0)
 
   const getCurrentTime = () => {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Initialize with user's initial query
+  // Initialize with user's initial query and send it to the chat service
   useEffect(() => {
-    if (initialQuery && messages.length === 0) {
+    const run = async () => {
+      if (!initialQuery || messages.length > 0) return
+
       const userMessage: Message = {
-        id: "1",
+        id: crypto.randomUUID(),
         content: initialQuery,
         sender: "user",
-        timestamp: getCurrentTime()
+        timestamp: getCurrentTime(),
       }
       setMessages([userMessage])
-      
-      // AI responds after a short delay
-      setTimeout(() => {
+
+      try {
         setIsTyping(true)
-        setTimeout(() => {
-          const aiMessage: Message = {
-            id: "2",
-            content: clarifyingQuestions[0],
-            sender: "ai",
-            timestamp: getCurrentTime()
-          }
-          setMessages(prev => [...prev, aiMessage])
-          setIsTyping(false)
-          setQuestionIndex(1)
-        }, 1500)
-      }, 500)
+        const reply = await sendChatMessage(initialQuery, [
+          { role: "user", content: initialQuery },
+        ])
+        const aiMessage: Message = {
+          id: crypto.randomUUID(),
+          content: reply,
+          sender: "ai",
+          timestamp: getCurrentTime(),
+        }
+        setMessages((prev) => [...prev, aiMessage])
+      } catch {
+        const errorMessage: Message = {
+          id: crypto.randomUUID(),
+          content:
+            "Sorry, something went wrong while contacting the Trially assistant. Please try again.",
+          sender: "ai",
+          timestamp: getCurrentTime(),
+        }
+        setMessages((prev) => [...prev, errorMessage])
+      } finally {
+        setIsTyping(false)
+      }
     }
-  }, [initialQuery])
+
+    void run()
+  }, [initialQuery, messages.length])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       content,
       sender: "user",
-      timestamp: getCurrentTime()
+      timestamp: getCurrentTime(),
     }
-    setMessages(prev => [...prev, userMessage])
+    setMessages((prev) => [...prev, userMessage])
 
-    // Check if we should redirect to results
-    if (questionIndex >= clarifyingQuestions.length) {
-      setTimeout(() => {
-        router.push(`/results?q=${encodeURIComponent(initialQuery)}`)
-      }, 1000)
-      return
-    }
-
-    // AI responds with next clarifying question
-    setTimeout(() => {
+    try {
       setIsTyping(true)
-      setTimeout(() => {
-        const aiMessage: Message = {
-          id: crypto.randomUUID(),
-          content: clarifyingQuestions[questionIndex],
-          sender: "ai",
-          timestamp: getCurrentTime()
-        }
-        setMessages(prev => [...prev, aiMessage])
-        setIsTyping(false)
-        setQuestionIndex(prev => prev + 1)
 
-        // Redirect to results after final question
-        if (questionIndex === clarifyingQuestions.length - 1) {
-          setTimeout(() => {
-            router.push(`/results?q=${encodeURIComponent(initialQuery)}`)
-          }, 3000)
-        }
-      }, 1500)
-    }, 500)
+      const history = [
+        ...messages.map((m) => ({
+          role: (m.sender === "user" ? "user" : "assistant") as
+            | "user"
+            | "assistant",
+          content: m.content,
+        })),
+        { role: "user" as const, content },
+      ]
+
+      const reply = await sendChatMessage(content, history)
+
+      const aiMessage: Message = {
+        id: crypto.randomUUID(),
+        content: reply,
+        sender: "ai",
+        timestamp: getCurrentTime(),
+      }
+      setMessages((prev) => [...prev, aiMessage])
+    } catch {
+      const errorMessage: Message = {
+        id: crypto.randomUUID(),
+        content:
+          "Sorry, something went wrong while contacting the Trially assistant. Please try again.",
+        sender: "ai",
+        timestamp: getCurrentTime(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   return (

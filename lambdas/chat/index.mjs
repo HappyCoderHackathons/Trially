@@ -13,6 +13,24 @@ function getRequestBody(event) {
 
 export const handler = async (event) => {
   try {
+    // Handle CORS preflight without requiring a body
+    const method =
+      event?.httpMethod ??
+      event?.requestContext?.http?.method ??
+      event?.requestContext?.httpMethod;
+    if (method === "OPTIONS") {
+      return {
+        statusCode: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+          "Access-Control-Max-Age": "0",
+        },
+        body: "",
+      };
+    }
+
     const body = getRequestBody(event);
     const message = (body.message ?? "").trim();
 

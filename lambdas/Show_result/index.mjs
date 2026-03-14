@@ -18,7 +18,6 @@ function httpsRequest(url, options, body) {
     });
 
     req.on("error", (e) => reject(new Error(`Request error: ${e.message}`)));
-    // ── Increased from 25s to 60s ────────────────────────────────────────
     req.setTimeout(60000, () => {
       req.destroy();
       reject(new Error("Request timed out"));
@@ -29,128 +28,26 @@ function httpsRequest(url, options, body) {
   });
 }
 
-// ── Aggressively trimmed extraction - only the most critical fields ──────────
-function extractRelevantPatientData(findings) {
-  const extracted = {};
-
-  for (const [patientId, patient] of Object.entries(findings)) {
-    const d    = patient.demographics        || {};
-    const dx   = patient.diagnosis           || {};
-    const sx   = patient.symptoms            || {};
-    const cm   = patient.currentMedications  || [];
-    const pm   = patient.previousMedications || [];
-    const co   = patient.comorbidities       || [];
-    const lab  = patient.labResults          || [];
-    const vit  = patient.vitalSigns          || {};
-    const pref = patient.trialPreferences    || {};
-    const alg  = patient.allergies           || [];
-    const con  = patient.consent             || {};
-
-    extracted[patientId] = {
-      // ── Essentials only ───────────────────────────────────────────────
-      age      : d.age,
-      sex      : d.sex,
-      country  : d.countryOfResidence,
-      volunteer: d.isHealthyVolunteer,
-
-      // ── Diagnosis ─────────────────────────────────────────────────────
-      diagnosis: dx.primary,
-      secondary: dx.secondary,
-      severity : dx.severity,
-      duration : dx.duration,
-
-      // ── Symptoms ──────────────────────────────────────────────────────
-      symptoms : sx.current,
-      painScore: sx.painScore,
-      limits   : sx.functionalLimitations,
-
-      // ── Current meds - name + effectiveness only ───────────────────────
-      currentMeds: cm.map(m => ({
-        name         : m.name,
-        dose         : m.dosage,
-        effectiveness: m.effectiveness,
-        controlled   : m.controlled,
-      })),
-
-      // ── Previous meds - only if stopped for a notable reason ───────────
-      prevMeds: pm
-        .filter(m => m.discontinuedReason || m.adverseEffects?.length)
-        .map(m => ({
-          name  : m.name,
-          reason: m.discontinuedReason,
-          AEs   : m.adverseEffects?.length ? m.adverseEffects : undefined,
-        })),
-
-      // ── Only flagged lab results ───────────────────────────────────────
-      flaggedLabs: lab
-        .filter(l => l.flag && l.flag !== "normal")
-        .map(l => ({
-          test : l.test,
-          value: `${l.value} ${l.unit}`,
-          ref  : l.referenceRange,
-          flag : l.flag,
-        })),
-
-      // ── Vitals only if present ─────────────────────────────────────────
-      vitals: vit.bmi
-        ? {
-            bmi: vit.bmi,
-            bp : vit.bloodPressure
-              ? `${vit.bloodPressure.systolic}/${vit.bloodPressure.diastolic}`
-              : undefined,
-          }
-        : undefined,
-
-      // ── Comorbidities - condition + controlled status only ─────────────
-      comorbidities: co.length
-        ? co.map(c => ({ condition: c.condition, controlled: c.controlled }))
-        : undefined,
-
-      // ── Allergies ─────────────────────────────────────────────────────
-      allergies: alg.length
-        ? alg.map(a => `${a.substance} (${a.reaction})`)
-        : undefined,
-
-      // ── Trial - key fields only ────────────────────────────────────────
-      trial: {
-        willing        : pref.willingToParticipate,
-        phases         : pref.preferredPhases,
-        excluded       : pref.excludedInterventionTypes?.length
-          ? pref.excludedInterventionTypes
-          : undefined,
-        maxTravel      : pref.maxTravelDistance,
-        visitFrequency : pref.maxVisitFrequency,
-        targetPain     : pref.goals?.targetPainScore,
-        goals          : pref.goals?.desiredOutcomes,
-      },
-
-      consentGiven: con.informedConsent,
-      dataSharing : con.dataSharing,
-    };
-
-    // ── Remove all undefined keys ──────────────────────────────────────
-    extracted[patientId] = JSON.parse(
-      JSON.stringify(extracted[patientId])
-    );
-  }
-
-  return extracted;
-}
-
-// ── Process patients in batches to avoid oversized prompts ──────────────────
-function chunkPatients(findings, batchSize = 2) {
-  const entries = Object.entries(findings);
-  const chunks  = [];
-
-  for (let i = 0; i < entries.length; i += batchSize) {
-    chunks.push(Object.fromEntries(entries.slice(i, i + batchSize)));
-  }
-
-  return chunks;
+// ── Extract only the fields needed for a meaningful summary ─────────────────
+function extractTrialData(trials) {
+  return trials.map((trial, index) => ({
+    index       : index + 1,
+    title       : trial.title       || "Untitled",
+    status      : trial.status      || "Unknown",
+    phase       : trial.phase       || "Not specified",
+    sponsor     : trial.sponsor     || "Unknown",
+    location    : trial.location    || "Not specified",
+    participants: trial.participants ?? "Not specified",
+    startDate   : trial.startDate   || "Not specified",
+    // ── Trim description to first 300 chars to keep prompt lean ─────────
+    description : trial.description
+      ? trial.description.slice(0, 300).trim() + (trial.description.length > 300 ? "..." : "")
+      : "No description available",
+  }));
 }
 
 export const handler = async (event) => {
-  const { model_name, patient_json } = event;
+  const { model_name, trials_json } = event;
 
   // ── Validate input ───────────────────────────────────────────────────────
   if (!model_name) {
@@ -160,109 +57,120 @@ export const handler = async (event) => {
     };
   }
 
-  if (!patient_json) {
+  if (!trials_json) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "Missing required parameter: 'patient_json'" }),
+      body: JSON.stringify({ error: "Missing required parameter: 'trials_json'" }),
     };
   }
 
-  // ── Parse patient JSON ───────────────────────────────────────────────────
-  let findings;
+  // ── Parse trials JSON if passed as a string ──────────────────────────────
+  let trials;
   try {
-    findings = typeof patient_json === "string"
-      ? JSON.parse(patient_json)
-      : patient_json;
+    trials = typeof trials_json === "string"
+      ? JSON.parse(trials_json)
+      : trials_json;
+
+    if (!Array.isArray(trials)) {
+      throw new Error("trials_json must be an array");
+    }
   } catch (e) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "Invalid JSON provided in 'patient_json'" }),
+      body: JSON.stringify({ error: `Invalid trials_json: ${e.message}` }),
     };
   }
 
-  // ── Extract and trim to relevant fields only ─────────────────────────────
-  const relevantData = extractRelevantPatientData(findings);
-  const patientCount = Object.keys(relevantData).length;
+  // ── Extract and trim relevant fields ────────────────────────────────────
+  const extractedTrials = extractTrialData(trials);
+  const trialCount      = extractedTrials.length;
 
-  // ── Split into batches of 2 patients per API call ────────────────────────
-  const batches      = chunkPatients(relevantData, 2);
-  const allSummaries = [];
+  console.log(`Processing ${trialCount} trial(s)`);
 
-  console.log(`Processing ${patientCount} patients in ${batches.length} batch(es)`);
+  // ── Build a compact plain-text representation of the trials ─────────────
+  const trialsText = extractedTrials.map(t => (
+    `Trial ${t.index}: ${t.title}\n` +
+    `  Status      : ${t.status}\n` +
+    `  Phase       : ${t.phase}\n` +
+    `  Sponsor     : ${t.sponsor}\n` +
+    `  Location    : ${t.location}\n` +
+    `  Participants: ${t.participants}\n` +
+    `  Start Date  : ${t.startDate}\n` +
+    `  Summary     : ${t.description}`
+  )).join("\n\n");
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch      = batches[i];
-    const batchKeys  = Object.keys(batch);
-    const batchCount = batchKeys.length;
+  // ── System prompt ────────────────────────────────────────────────────────
+  const systemPrompt = `You are a clinical research analyst.
+You have been given data on ${trialCount} clinical trial(s).
+Your task is to write a short, clear, and professional description for each trial.
 
-    console.log(`Processing batch ${i + 1}/${batches.length}: ${batchKeys.join(", ")}`);
+Rules:
+- No emojis.
+- Only use information explicitly present in the trial data provided.
+- For each trial write 2 to 3 sentences covering:
+    1. What the trial is investigating and why
+    2. Who is involved (sponsor, participants, location)
+    3. The current status and phase
+- After all individual trial descriptions, write a brief overall summary paragraph 
+  highlighting any patterns such as common conditions, phases, or statuses across the trials.
+- Keep each trial description concise and factual.`;
 
-    // ── Compact system prompt ──────────────────────────────────────────────
-    const systemPrompt = `You are a clinical data analyst. Summarise each patient concisely covering:
-1. Overview (age, sex, country, diagnosis, severity)
-2. Clinical status (symptoms, pain score, limitations)
-3. Medications (current effectiveness, past adverse effects)
-4. Clinical flags (uncontrolled conditions, flagged labs, declining meds)
-5. Trial suitability (phases, goals, exclusions)
-No emojis. Only use data provided. Be concise.
-
-Patient Data:
-${JSON.stringify(batch, null, 2)}`;
-
-    try {
-      const payload = JSON.stringify({
-        model   : model_name,
-        messages: [
-          {
-            role   : "system",
-            content: systemPrompt,
-          },
-          {
-            role   : "user",
-            content: `Summarise the ${batchCount} patient(s) provided.`,
-          },
-        ],
-        // ── Limit response length ────────────────────────────────────────
-        max_tokens: 1024,
-      });
-
-      console.log(`Batch ${i + 1} payload size: ${Buffer.byteLength(payload)} bytes`);
-
-      const { status, data } = await httpsRequest(
-        "https://api.featherless.ai/v1/chat/completions",
+  // ── Call Featherless API ─────────────────────────────────────────────────
+  try {
+    const payload = JSON.stringify({
+      model     : model_name,
+      messages  : [
         {
-          method : "POST",
-          headers: {
-            "Content-Type"  : "application/json",
-            "Content-Length": Buffer.byteLength(payload),
-            Authorization   : `Bearer ${process.env.FEATHERLESS_API_KEY}`,
-          },
+          role   : "system",
+          content: systemPrompt,
         },
-        payload
-      );
+        {
+          role   : "user",
+          content: `Please write a short description for each of the following ${trialCount} clinical trial(s):\n\n${trialsText}`,
+        },
+      ],
+      max_tokens: 1500,
+    });
 
-      if (status !== 200) {
-        console.error(`Batch ${i + 1} failed with status ${status}:`, data);
-        allSummaries.push(`Batch ${i + 1} error: ${JSON.stringify(data)}`);
-        continue;
-      }
+    console.log(`Payload size: ${Buffer.byteLength(payload)} bytes`);
 
-      const reply = data.choices[0].message.content;
-      allSummaries.push(reply);
+    const { status, data } = await httpsRequest(
+      "https://api.featherless.ai/v1/chat/completions",
+      {
+        method : "POST",
+        headers: {
+          "Content-Type"  : "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+          Authorization   : `Bearer ${process.env.FEATHERLESS_API_KEY}`,
+        },
+      },
+      payload
+    );
 
-    } catch (batchError) {
-      console.error(`Batch ${i + 1} error:`, batchError.message);
-      allSummaries.push(`Batch ${i + 1} failed: ${batchError.message}`);
+    if (status !== 200) {
+      return {
+        statusCode: status,
+        body: JSON.stringify({ error: data }),
+      };
     }
-  }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      model             : model_name,
-      patients_analysed : patientCount,
-      batches_processed : batches.length,
-      summary           : allSummaries.join("\n\n---\n\n"),
-    }),
-  };
+    const reply = data.choices[0].message.content;
+    console.log("Reply:", reply);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        model           : model_name,
+        trials_processed: trialCount,
+        descriptions    : reply,
+      }),
+    };
+
+  } catch (error) {
+    console.error("[ERROR]", error.message);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
 };

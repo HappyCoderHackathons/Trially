@@ -1,53 +1,28 @@
-function getRequestBody(event) {
-  if (!event) {
-    return {};
-  }
-  if (typeof event.body === "string") {
-    return event.body.trim() ? JSON.parse(event.body) : {};
-  }
-  if (event.body && typeof event.body === "object") {
-    return event.body;
-  }
-  return event;
-}
-
 export const handler = async (event) => {
+  const method =
+    event?.httpMethod ??
+    event?.requestContext?.http?.method ??
+    event?.requestContext?.httpMethod;
+
+  if (method === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Max-Age": "0",
+      },
+      body: "",
+    };
+  }
+
   try {
-    const method =
-      event?.httpMethod ??
-      event?.requestContext?.http?.method ??
-      event?.requestContext?.httpMethod;
-    if (method === "OPTIONS") {
-      return {
-        statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type,Authorization",
-          "Access-Control-Max-Age": "0",
-        },
-        body: "",
-      };
-    }
-
-    const body = getRequestBody(event);
-    const message = (body.message ?? "").trim();
-
-    if (!message) {
-      return {
-        statusCode: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ error: "Missing message" }),
-      };
-    }
-
-    // TODO: Replace with real model call (Bedrock, OpenAI, etc.)
-    const reply =
-      "Thanks for your message. This is a placeholder response from the Trially Lambda. Here's what you said: " +
-      message;
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${process.env.AGENT_ID}`,
+      { headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY ?? "" } }
+    );
+    const { signed_url } = await response.json();
 
     return {
       statusCode: 200,
@@ -55,10 +30,10 @@ export const handler = async (event) => {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ reply }),
+      body: JSON.stringify({ signed_url }),
     };
   } catch (err) {
-    console.error("Chat Lambda error:", err);
+    console.error("Signed URL Lambda error:", err);
     return {
       statusCode: 500,
       headers: {

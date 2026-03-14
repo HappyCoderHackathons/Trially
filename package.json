@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:trials": "node scripts/query-trials-search.mjs",
+    "test:trials:medical": "node scripts/query-trials-search.mjs --medical-only",
+    "test:trials:uuid": "node scripts/query-trials-search.mjs --uuid"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1009.0",

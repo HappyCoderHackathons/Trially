@@ -25,11 +25,43 @@ function httpsRequest(url, options, body) {
   });
 }
 
+function getBody(event) {
+  let raw = event.body;
+  if (raw == null) return null;
+  if (typeof raw === "object" && !Buffer.isBuffer(raw)) {
+    return raw;
+  }
+  const str = typeof raw === "string" ? raw : String(raw);
+  if (event.isBase64Encoded) {
+    try {
+      raw = Buffer.from(str, "base64").toString("utf8");
+    } catch (e) {
+      console.warn("Base64 decode failed:", e.message);
+      return null;
+    }
+  } else {
+    raw = str;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn("Body JSON parse failed:", e.message);
+    return null;
+  }
+}
+
 export const handler = async (event) => {
-  const { model_name, model_message } = event;
+  let model_name = event.model_name;
+  let model_message = event.model_message;
+  const body = getBody(event);
+  if (body) {
+    if (body.model_name != null) model_name = body.model_name;
+    if (body.model_message != null) model_message = body.model_message;
+  }
 
   // ── Validate input ───────────────────────────────────────────────────────
   if (!model_name || !model_message) {
+    console.warn("Missing params; event.keys=", Object.keys(event), "hasBody=", !!event.body);
     return {
       statusCode: 400,
       body: JSON.stringify({

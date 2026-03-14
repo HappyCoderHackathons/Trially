@@ -12,7 +12,7 @@ You will receive:
 Output exactly one JSON object with no markdown, no code fence, no explanation. The object must match the trials API patient schema so it can be used for trial search and filtering.
 
 Patient schema (use only keys that you can infer; omit keys you do not know):
-- diagnosis: string (primary condition) or { primary?, secondary?: string[], stage?, severity?, duration?, diagnosedDate?, affectedAreas?: string[] }
+- diagnosis: string (primary condition NAME for search) or { primary?, secondary?: string[], stage?, severity?, duration?, diagnosedDate?, affectedAreas?: string[], icd10Code? }. CRITICAL: primary must be the condition NAME (e.g. "Rheumatoid arthritis"), not an ICD-10 code like "M06.9", so that clinical trial search can match. Put ICD-10 in icd10Code if needed.
 - demographics: { age?, sex?, ethnicity?, nationality?, countryOfResidence?, occupation?, employmentStatus?, isHealthyVolunteer?, location?: { city?, state?, zip?, coordinates? } }
 - symptoms: { current?: string[], painScore?, morningStiffnessDuration?, functionalLimitations?: string[] }
 - currentMedications: Array<{ name?, dosage?, frequency?, duration?, indication?, effectiveness?, controlled? }>
@@ -28,7 +28,7 @@ Patient schema (use only keys that you can infer; omit keys you do not know):
 - insurance: { provider?, plan?, coverageType? }
 - consent: { informedConsent?, consentDate?, dataSharing? }
 
-Prefer mapping from the structured medical extraction (ICD-10 → diagnosis.primary, RxNorm → currentMedications, etc.). Use the summary to fill gaps and resolve ambiguity. If the extraction is empty or missing, infer from the summary only. Output only valid JSON.`;
+Prefer mapping from the structured medical extraction. For diagnosis.primary use the condition NAME (e.g. from the summary or the ICD-10 description like "Rheumatoid arthritis, unspecified"), never the raw ICD-10 code—trial search requires a name. Use RxNorm/SNOMED for medications and conditions. Use the summary to fill gaps. Output only valid JSON.`;
 
 export function buildPatientFromSummaryUserPrompt(summary: string, medicalData: unknown): string {
   const medicalJson =

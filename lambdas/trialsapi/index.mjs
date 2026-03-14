@@ -1,5 +1,68 @@
 const BASE_URL = "https://clinicaltrials.gov/api/v2";
 
+// ── Cache clients ──────────────────────────────────────────────
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import Redis from "ioredis";
+
+const dynamo = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env.AWS_REGION ?? "us-east-1" })
+);
+
+let _redis = null;
+function getRedis() {
+  if (!_redis) {
+    _redis = new Redis({
+      host: process.env.ELASTICACHE_HOST,
+      port: 6379,
+      tls: {},
+      connectTimeout: 2000,
+      commandTimeout: 1000,
+      retryStrategy: (times) => (times > 2 ? null : 200),
+    });
+    _redis.on("error", (err) => console.error("Valkey error:", err));
+  }
+  return _redis;
+}
+
+const TABLE_NAME    = "ClinicalTrialsCache";
+const VALKEY_TTL    = 3600;       // 1 hour
+const DYNAMO_TTL_HR = 24;         // 24 hours
+
+async function getCached(key) {
+  // 1. Valkey first
+  try {
+    const hit = await getRedis().get(`trials:${key}`);
+    if (hit) return { source: "valkey", data: JSON.parse(hit) };
+  } catch (e) { console.warn("Valkey GET failed:", e.message); }
+
+  // 2. DynamoDB fallback
+  const result = await dynamo.send(
+    new GetCommand({ TableName: TABLE_NAME, Key: { cacheKey: key } })
+  );
+  if (result.Item) {
+    const data = JSON.parse(result.Item.data);
+    // Backfill Valkey
+    try { await getRedis().set(`trials:${key}`, JSON.stringify(data), "EX", VALKEY_TTL); }
+    catch (e) { console.warn("Valkey backfill failed:", e.message); }
+    return { source: "dynamodb", data };
+  }
+
+  return null;
+}
+
+async function setCached(key, data) {
+  const ttl = Math.floor(Date.now() / 1000) + DYNAMO_TTL_HR * 3600;
+  await Promise.allSettled([
+    getRedis().set(`trials:${key}`, JSON.stringify(data), "EX", VALKEY_TTL),
+    dynamo.send(new PutCommand({
+      TableName: TABLE_NAME,
+      Item: { cacheKey: key, data: JSON.stringify(data), cachedAt: new Date().toISOString(), ttl },
+    })),
+  ]);
+}
+// ──────────────────────────────────────────────────────────────
+
 const VALID_STATUSES = new Set([
   "RECRUITING",
   "NOT_YET_RECRUITING",
@@ -856,17 +919,31 @@ export const handler = async (event) => {
 
     const url = `${BASE_URL}/studies?${search.toString()}`;
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
+    // ── Cache lookup ──────────────────────────────────────────
+    const cacheKey = Buffer.from(search.toString()).toString("base64");
+    const cached = await getCached(cacheKey);
+    let data;
 
-    if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`ClinicalTrials API error ${res.status}: ${errorBody}`);
+    if (cached) {
+      console.log(`Cache HIT (${cached.source})`);
+      data = cached.data;
+    } else {
+      console.log("Cache MISS — fetching from ClinicalTrials.gov...");
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        throw new Error(`ClinicalTrials API error ${res.status}: ${errorBody}`);
+      }
+
+      data = await res.json();
+      await setCached(cacheKey, data);
     }
+    // ─────────────────────────────────────────────────────────
 
-    const data = await res.json();
     const filteredStudies = patient
       ? filterAndRankStudies(data.studies ?? [], patient)
       : (data.studies ?? []).map((study) => ({ study }));

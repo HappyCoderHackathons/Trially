@@ -75,7 +75,7 @@ export default function ChatPage() {
 
   const handleSendMessage = (content: string) => {
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       content,
       sender: "user",
       timestamp: getCurrentTime()
@@ -95,7 +95,7 @@ export default function ChatPage() {
       setIsTyping(true)
       setTimeout(() => {
         const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
+          id: crypto.randomUUID(),
           content: clarifyingQuestions[questionIndex],
           sender: "ai",
           timestamp: getCurrentTime()

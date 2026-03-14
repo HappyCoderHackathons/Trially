@@ -68,7 +68,7 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Enter Text Here"
-          className="flex-1 bg-transparent text-center text-primary-foreground placeholder:text-primary-foreground/60 focus:outline-none px-4 py-2 font-mono text-sm tracking-wide"
+          className="flex-1 bg-transparent text-center text-primary-foreground placeholder:text-black focus:outline-none px-4 py-2 font-mono text-sm tracking-wide"
         />
 
         {/* Audio Button */}

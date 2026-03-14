@@ -34,12 +34,70 @@ export default function ChatPage() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  //Create Conversation with Error Handling
+  const medicalApiUrl = "/api/medical"
+
+  const medicalOperations = [
+    "detect_entities",
+    "detect_phi",
+    "infer_icd10",
+    "infer_rx_norm",
+    "infer_snomed",
+  ] as const
+
+  async function sendToMedicalApi(body: {
+    text: string
+    operations: readonly string[]
+  }): Promise<void> {
+    const res = await fetch(medicalApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      throw new Error(await res.text().catch(() => `Medical API ${res.status}`))
+    }
+  }
+
+  // Create Conversation with Error Handling
   const conversation = useConversation({
     textOnly: true,
     onMessage: ({ message, source }: { message: string; source: string }) => {
       if (source === "ai") {
         setIsTyping(false)
+
+        if (message.startsWith("<done>")) {
+          const text = message.slice("<done>".length).trim()
+          if (text) {
+            const body = { text, operations: [...medicalOperations] }
+            sendToMedicalApi(body)
+              .then(() => {
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: crypto.randomUUID(),
+                    content: "Summary sent for medical processing and saved.",
+                    sender: "ai",
+                    timestamp: getCurrentTime(),
+                  },
+                ])
+              })
+              .catch((err) => {
+                console.error("Medical API error:", err)
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: crypto.randomUUID(),
+                    content: "Summary could not be sent for processing. Please try again.",
+                    sender: "ai",
+                    timestamp: getCurrentTime(),
+                  },
+                ])
+              })
+          }
+          conversation.endSession()
+          return
+        }
+
         setMessages((prev) => [
           ...prev,
           {

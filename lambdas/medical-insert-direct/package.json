@@ -1,0 +1,9 @@
+{
+  "name": "medical-insert-direct",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1009.0"
+  }
+}

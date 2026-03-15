@@ -637,7 +637,7 @@ function getStudyPhases(study) {
 
 function matchesStudyStatus(study) {
   const status = study.protocolSection?.statusModule?.overallStatus ?? null;
-  return status === "RECRUITING" || status === "NOT_YET_RECRUITING";
+  return status === "RECRUITING";
 }
 
 function matchesStudyPhase(study, preferredPhases) {

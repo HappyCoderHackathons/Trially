@@ -67,9 +67,13 @@ function ChatPageContent() {
       if (source === "ai") {
         setIsTyping(false)
 
-        if (message.startsWith("<done>")) {
-          const text = message.slice("<done>".length).trim()
+        const doneAt = message.indexOf("<done>")
+        if (doneAt !== -1) {
+          const afterDone = message.slice(doneAt + "<done>".length)
+          const endTag = afterDone.indexOf("</done>")
+          const text = (endTag === -1 ? afterDone : afterDone.slice(0, endTag)).trim()
           if (text) {
+            console.log("text", text);
             const body = { text, operations: [...medicalOperations] }
             sendToMedicalApi(body)
               .then((data) => {

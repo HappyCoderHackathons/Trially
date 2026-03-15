@@ -10,6 +10,7 @@ import { getAwsCredentialProvider, getIdToken } from "@/lib/aws-credentials"
 import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract"
 import { PDFDocument } from "pdf-lib"
 import { useConversation } from "@elevenlabs/react"
+import { DropZone } from "@/components/dropzone"
 
 interface Message {
   id: string
@@ -26,6 +27,7 @@ function ChatPageContent() {
   const initialQuerySent = useRef(false)
 
   const [messages, setMessages] = useState<Message[]>([])
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [processingStatus, setProcessingStatus] = useState<string | null>(null)
 
@@ -258,14 +260,15 @@ function ChatPageContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
-  const handleSendMessage = async (content: string, files: File[] = []) => {
-    let combinedContent = content
+  const handleSendMessage = async (content: string, files: File[] = [], fhirBundles?: Map<string, unknown>) => {
+    let messageForAI = content
     if (files.length > 0) {
       setProcessingStatus("Extracting text from documents…")
       try {
         const extractedText = await extractTextFromFiles(files)
         if (extractedText.trim()) {
-          combinedContent = `${content}\n\n---\nAttached documents text:\n${extractedText}`
+          // AI gets the full text, user only sees their message + file names
+          messageForAI = `${content}\n\n---\nAttached documents text:\n${extractedText}`
         }
       } catch (e) {
         setProcessingStatus(null)
@@ -286,79 +289,94 @@ function ChatPageContent() {
       setProcessingStatus(null)
     }
 
+    // Show user only their message + a clean file badge, not the extracted text
+    const fileNames = files.map(f => f.name)
+    const displayContent = fileNames.length > 0
+      ? `${content}\n\n📎 ${fileNames.join(", ")}`
+      : content
+
     setMessages((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
-        content: combinedContent,
+        content: displayContent,   // clean version for the UI
         sender: "user",
         timestamp: getCurrentTime(),
       },
     ])
     setIsTyping(true)
-    conversation.sendUserMessage(combinedContent)
+    conversation.sendUserMessage(messageForAI)  // full version with text for the AI
   }
 
   return (
-    <main className="min-h-screen flex flex-col bg-background">
-      {/* Background elements */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
-      <BackgroundDecorations />
+    <DropZone onDrop={setDroppedFiles}>
+      <main className="min-h-screen flex flex-col bg-background">
+        {/* Background elements */}
+        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
+        <BackgroundDecorations />
 
-      <AppHeader
-        backLink={{ href: "/", label: "Back to home" }}
-        showDashboardLink
-        className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-border"
-      />
+        <AppHeader
+          backLink={{ href: "/", label: "Back to home" }}
+          showDashboardLink
+          className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-border"
+        />
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          {messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              content={message.content}
-              sender={message.sender}
-              timestamp={message.timestamp}
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-4 py-6">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                content={message.content}
+                sender={message.sender}
+                timestamp={message.timestamp}
+              />
+            ))}
+            
+            {/* Processing status indicator */}
+            {processingStatus && (
+              <div className="flex justify-start mb-4">
+                <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground">{processingStatus}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Typing indicator */}
+            {isTyping && (
+              <div className="flex justify-start mb-4">
+                <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* Chat Input */}
+        <div className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-md border-t border-border">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <ChatInput
+              onSend={(msg, files, fhirBundles) => {
+                handleSendMessage(msg, files, fhirBundles)
+                setDroppedFiles([])
+              }}
+              disabled={isTyping}
+              initialFiles={droppedFiles}
             />
-          ))}
-          
-          {/* Processing status indicator */}
-          {processingStatus && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">{processingStatus}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Typing indicator */}
-          {isTyping && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
+          </div>
         </div>
-      </div>
-
-      {/* Chat Input */}
-      <div className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-md border-t border-border">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <ChatInput onSend={handleSendMessage} disabled={isTyping} />
-        </div>
-      </div>
-    </main>
+      </main>
+    </DropZone>
   )
 }
 

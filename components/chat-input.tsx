@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Paperclip, Mic, Send, X } from "lucide-react"
 import { useScribe } from "@elevenlabs/react";
 import { parseFHIRFile, type FHIRBundle } from "@/lib/fhir"
@@ -8,9 +8,10 @@ import { parseFHIRFile, type FHIRBundle } from "@/lib/fhir"
 interface ChatInputProps {
   onSend: (message: string, files: File[], fhirBundles: Map<string, FHIRBundle>) => void
   disabled?: boolean
+  initialFiles?: File[]  
 }
 
-export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSend, disabled = false, initialFiles = [] }: ChatInputProps) {
   const [inputValue, setInputValue] = useState("")
   const [isRecording, setIsRecording] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -44,7 +45,6 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
       setSelectedFiles([])
       return
     }
-    //setSelectedFiles(Array.from(files))
     const incoming = Array.from(files)
     const newBundles = new Map(fhirBundles)
     const newErrors = new Map(fileErrors)
@@ -65,8 +65,33 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
     setFhirBundles(newBundles)
     setFileErrors(newErrors)
     setSelectedFiles(incoming)
-
   }
+
+  useEffect(() => {
+    if (initialFiles.length === 0) return
+    const processDropped = async () => {
+      const newBundles = new Map<string, FHIRBundle>()
+      const newErrors = new Map<string, string>()
+      await Promise.all(
+        initialFiles.map(async (file) => {
+          if (file.name.endsWith(".json") || file.name.endsWith(".xml")) {
+            const result = await parseFHIRFile(file)
+            if (result.valid) {
+              newBundles.set(file.name, result.bundle)
+            } else {
+              newErrors.set(file.name, result.error)
+            }
+          }
+        })
+      )
+      setFhirBundles(newBundles)
+      setFileErrors(newErrors)
+      setSelectedFiles(initialFiles)
+    }
+    processDropped()
+  }, [initialFiles])
+
+  
 
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))

@@ -43,6 +43,7 @@ export async function POST(request: Request) {
   }
 
   let patient: Record<string, unknown>;
+  let patientSummary: string | null = null;
   try {
     const res = await fetch(medicalGetUrl, {
       method: "POST",
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
       );
     }
     patient = data.patient as Record<string, unknown>;
+    const inputText = (data.input as Record<string, unknown> | null)?.text;
+    if (typeof inputText === "string" && inputText.trim()) {
+      patientSummary = inputText.trim();
+    }
   } catch (err) {
     console.error("[trials-search] lookup error:", err);
     return Response.json(
@@ -142,7 +147,11 @@ export async function POST(request: Request) {
       }
     }
 
-    return Response.json({ ...data, ...(aiSummary != null && { aiSummary }) }, { status: 200, headers });
+    return Response.json({
+      ...data,
+      ...(patientSummary != null && { patientSummary }),
+      ...(aiSummary != null && { aiSummary }),
+    }, { status: 200, headers });
   } catch (err) {
     console.error("[trials-search] error:", err);
     return Response.json(

@@ -43,6 +43,7 @@ function ResultsPageContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const [trials, setTrials] = useState<Trial[]>([])
   const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [patientSummary, setPatientSummary] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
@@ -53,6 +54,7 @@ function ResultsPageContent() {
     setError(null)
     setTrials([])
     setAiSummary(null)
+    setPatientSummary(null)
 
     fetch("/api/trials-search", {
       method: "POST",
@@ -78,6 +80,7 @@ function ResultsPageContent() {
         }))
         setTrials(mapped)
         setTotal(data.total ?? mapped.length)
+        setPatientSummary(data.patientSummary ?? null)
         setAiSummary(data.aiSummary ?? null)
       })
       .catch((err) => setError(String(err)))
@@ -154,6 +157,13 @@ function ResultsPageContent() {
                 Found {total} clinical {total === 1 ? "trial" : "trials"} matching your profile
               </p>
             </div>
+
+            {patientSummary && (
+              <div className="mb-8 p-5 rounded-2xl bg-card/80 border border-border backdrop-blur-sm">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Your Profile Summary</h2>
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{patientSummary}</p>
+              </div>
+            )}
 
             {paginatedTrials.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">

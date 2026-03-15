@@ -46,8 +46,15 @@ function extractTrialData(trials) {
   }));
 }
 
+function getBody(event) {
+  if (!event) return {};
+  if (typeof event.body === "string") return event.body.trim() ? JSON.parse(event.body) : {};
+  if (event.body && typeof event.body === "object") return event.body;
+  return event;
+}
+
 export const handler = async (event) => {
-  const { model_name, trials_json } = event;
+  const { model_name, trials_json } = getBody(event);
 
   // ── Validate input ───────────────────────────────────────────────────────
   if (!model_name) {

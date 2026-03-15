@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react"
 import { ChatMessage } from "@/components/chat-message"
 import { ChatInput } from "@/components/chat-input"
 import { BackgroundDecorations } from "@/components/background-decorations"
-import { getAwsCredentialProvider } from "@/lib/aws-credentials"
+import { getAwsCredentialProvider, getIdToken } from "@/lib/aws-credentials"
 import { TextractClient, DetectDocumentTextCommand } from "@aws-sdk/client-textract"
 import { PDFDocument } from "pdf-lib"
 import { useConversation } from "@elevenlabs/react"
@@ -50,9 +50,13 @@ function ChatPageContent() {
     text: string
     operations: readonly string[]
   }): Promise<{ id?: string; [key: string]: unknown }> {
+    const token = getIdToken()
     const res = await fetch(medicalApiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     })
     if (!res.ok) {

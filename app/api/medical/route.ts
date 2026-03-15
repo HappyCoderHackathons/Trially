@@ -1,4 +1,15 @@
+import { NextRequest } from "next/server";
 import { connectLlm, getConnectLlmUrl } from "@/lib/connect_llm";
+
+function decodeJwtSub(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    return decoded.sub ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const apiBase = process.env.NEXT_PUBLIC_CHAT_API_URL?.replace(/\/?$/, "") ?? "";
 const medicalApiUrl =
@@ -14,7 +25,7 @@ export async function GET() {
   );
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body.text !== "string" || !Array.isArray(body.operations)) {
     return Response.json(
@@ -24,6 +35,10 @@ export async function POST(request: Request) {
   }
 
   const headers = { "Access-Control-Allow-Origin": "*" as const };
+
+  const authHeader = request.headers.get("Authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const userId = token ? decodeJwtSub(token) : null;
 
   // Upstream (Comprehend Medical) has a 20k character limit; avoid 413/500 from oversized text
   const MAX_MEDICAL_TEXT_LENGTH = 20_000;
@@ -98,6 +113,7 @@ export async function POST(request: Request) {
       uuid: id,
       result,
       ...(patient != null && { patient }),
+      ...(userId != null && { userId }),
     }),
   });
 

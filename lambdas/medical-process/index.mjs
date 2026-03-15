@@ -78,6 +78,7 @@ export const handler = async (event) => {
   const inputStr = toStoreValue(body.input);
   const resultStr = toStoreValue(body.result);
   const patientStr = body.patient != null ? toStoreValue(body.patient) : "";
+  const userId = body.userId != null ? String(body.userId).trim() : "";
 
   const item = {
     id: { S: id },
@@ -86,6 +87,7 @@ export const handler = async (event) => {
     result: { S: resultStr },
   };
   if (patientStr) item.patient = { S: patientStr };
+  if (userId) item.userId = { S: userId };
 
   try {
     await dynamo.send(
@@ -99,5 +101,5 @@ export const handler = async (event) => {
     return response(500, { error: "Failed to store result", details: String(err) });
   }
 
-  return response(200, { id, createdAt: now, stored: true, patientStored: Boolean(patientStr) });
+  return response(200, { id, createdAt: now, stored: true, patientStored: Boolean(patientStr), userIdStored: Boolean(userId) });
 };

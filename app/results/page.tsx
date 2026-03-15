@@ -119,6 +119,8 @@ function ResultsPageContent() {
 
   useEffect(() => {
     if (!uuid) return
+    const controller = new AbortController()
+
     setLoading(true)
     setError(null)
     setTrials([])
@@ -129,6 +131,7 @@ function ResultsPageContent() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uuid }),
+      signal: controller.signal,
     })
       .then((res) => res.json())
       .then((data) => {
@@ -149,8 +152,10 @@ function ResultsPageContent() {
         setPatientSummary(data.patientSummary ?? null)
         setAiSummary(data.aiSummary ?? null)
       })
-      .catch((err) => setError(String(err)))
+      .catch((err) => { if ((err as Error).name !== "AbortError") setError(String(err)) })
       .finally(() => setLoading(false))
+
+    return () => controller.abort()
   }, [uuid])
 
   const totalPages = Math.ceil(trials.length / ITEMS_PER_PAGE)

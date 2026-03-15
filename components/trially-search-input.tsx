@@ -43,7 +43,7 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
       modelId: "scribe_v2_realtime",
       onPartialTranscript: (data) => {
         console.log("Partial:", data.text);
-        setInputValue(data.text); // Update input in real-time
+        setInputValue(data.text);
       },
       onCommittedTranscript: (data) => {
         console.log("Committed:", data.text);

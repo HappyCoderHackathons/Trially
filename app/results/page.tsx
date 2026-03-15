@@ -70,12 +70,17 @@ function TrialResultCard({ trial }: { trial: Trial }) {
     <article
       className={`bg-card border border-border border-l-4 ${cfg.accent} rounded-r-xl pl-5 pr-6 py-5 hover:shadow-sm transition-shadow duration-150`}
     >
-      {/* Status badge */}
-      <div className="mb-3">
+      {/* Status badge + Phase */}
+      <div className="flex items-center justify-between mb-3">
         <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${cfg.badge}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
           {trial.enrollmentStatus}
         </span>
+        {trial.phase && (
+          <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
+            Phase {trial.phase}
+          </span>
+        )}
       </div>
 
       {/* Title — serif for warmth and authority */}

@@ -29,6 +29,7 @@ function ChatPageContent() {
 
   const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null)
 
 
   const getCurrentTime = () => {
@@ -75,8 +76,10 @@ function ChatPageContent() {
           if (text) {
             console.log("text", text);
             const body = { text, operations: [...medicalOperations] }
+            setProcessingStatus("Analyzing medical data…")
             sendToMedicalApi(body)
               .then((data) => {
+                setProcessingStatus(null)
                 setMessages((prev) => [
                   ...prev,
                   {
@@ -92,6 +95,7 @@ function ChatPageContent() {
                 }
               })
               .catch((err) => {
+                setProcessingStatus(null)
                 console.error("Medical API error:", err)
                 setMessages((prev) => [
                   ...prev,
@@ -255,12 +259,14 @@ function ChatPageContent() {
   const handleSendMessage = async (content: string, files: File[] = []) => {
     let combinedContent = content
     if (files.length > 0) {
+      setProcessingStatus("Extracting text from documents…")
       try {
         const extractedText = await extractTextFromFiles(files)
         if (extractedText.trim()) {
           combinedContent = `${content}\n\n---\nAttached documents text:\n${extractedText}`
         }
       } catch (e) {
+        setProcessingStatus(null)
         const err = e instanceof Error ? e.message : String(e)
         setMessages((prev) => [
           ...prev,
@@ -275,6 +281,7 @@ function ChatPageContent() {
         ])
         return
       }
+      setProcessingStatus(null)
     }
 
     setMessages((prev) => [
@@ -335,6 +342,18 @@ function ChatPageContent() {
             />
           ))}
           
+          {/* Processing status indicator */}
+          {processingStatus && (
+            <div className="flex justify-start mb-4">
+              <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">{processingStatus}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Typing indicator */}
           {isTyping && (
             <div className="flex justify-start mb-4">

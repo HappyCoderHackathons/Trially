@@ -27,7 +27,8 @@ export const handler = async (event) => {
   try {
     const result = await dynamo.send(new QueryCommand({
       TableName: TABLE_NAME,
-      KeyConditionExpression: "uuid = :uuid",
+      KeyConditionExpression: "#uuid = :uuid",
+      ExpressionAttributeNames: { "#uuid": "uuid" },
       ExpressionAttributeValues: { ":uuid": { S: String(uuid) } },
     }));
 

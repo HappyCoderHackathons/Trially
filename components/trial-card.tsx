@@ -19,6 +19,7 @@ export interface Trial {
 
 interface TrialCardProps {
   trial: Trial
+  initialSaved?: boolean
 }
 
 const STATUS_CONFIG: Record<Trial["enrollmentStatus"], { dot: string; badge: string; accent: string }> = {
@@ -28,8 +29,8 @@ const STATUS_CONFIG: Record<Trial["enrollmentStatus"], { dot: string; badge: str
   Completed:        { dot: "bg-slate-400",    badge: "text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",             accent: "border-l-slate-400"   },
 }
 
-export function TrialCard({ trial }: TrialCardProps) {
-  const [saved, setSaved] = useState(false)
+export function TrialCard({ trial, initialSaved = false }: TrialCardProps) {
+  const [saved, setSaved] = useState(initialSaved)
   const cfg = STATUS_CONFIG[trial.enrollmentStatus]
 
   const meta = [
@@ -64,10 +65,11 @@ export function TrialCard({ trial }: TrialCardProps) {
                 const headers: Record<string, string> = { "Content-Type": "application/json" }
                 if (idToken) headers.Authorization = `Bearer ${idToken}`
 
+                const trialId = trial.nctId ?? trial.id
                 await fetch("/api/trials/save", {
                   method: next ? "POST" : "DELETE",
                   headers,
-                  body: JSON.stringify({ trialId: trial.id, trial }),
+                  body: JSON.stringify({ trialId, trial }),
                 })
               } catch (err) {
                 console.error("Failed to sync saved trial:", err)

@@ -7,6 +7,7 @@ import { Pagination } from "@/components/pagination"
 import { AppHeader } from "@/components/app-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrialCard } from "@/components/trial-card"
+import { getIdToken } from "@/lib/aws-credentials"
 
 interface ApiStudy {
   nctId: string | null
@@ -119,6 +120,7 @@ function ResultsPageContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
 
   // Phase 1: fetch trials
   useEffect(() => {
@@ -166,6 +168,21 @@ function ResultsPageContent() {
 
     return () => controller.abort()
   }, [uuid])
+
+  // Fetch starred trial IDs so cards can show correct initial state
+  useEffect(() => {
+    const token = getIdToken()
+    if (!token) return
+    fetch("/api/trials/starred", { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data) => {
+        const ids = new Set<string>(
+          (data.items ?? []).map((item: { trialId: string }) => item.trialId)
+        )
+        setStarredIds(ids)
+      })
+      .catch(() => {/* non-fatal */})
+  }, [])
 
   // Phase 2: fetch AI summary once trials are ready
   useEffect(() => {
@@ -281,7 +298,11 @@ function ResultsPageContent() {
             {paginatedTrials.length > 0 ? (
               <div className="space-y-3">
                 {paginatedTrials.map((trial) => (
-                  <TrialCard trial={trial} />
+                  <TrialCard
+                    key={trial.nctId ?? trial.id}
+                    trial={trial}
+                    initialSaved={starredIds.has(trial.nctId ?? trial.id)}
+                  />
                 ))}
               </div>
             ) : (

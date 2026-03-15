@@ -888,6 +888,7 @@ function mapStudy(study) {
       : (location.city ?? null);
 
   return {
+    nctId: id?.nctId ?? null,
     title: id?.briefTitle ?? null,
     description: p?.descriptionModule?.briefSummary ?? null,
     status: status?.overallStatus ?? null,

@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react"
 import { TrialCard } from "@/components/trial-card"
 
 interface ApiStudy {
+  nctId: string | null
   title: string | null
   description: string | null
   status: string | null
@@ -21,14 +22,15 @@ interface ApiStudy {
 
 interface Trial {
   id: string
+  nctId: string | null
   name: string
   description: string
   location: string | null
-  sponsor: string
+  sponsor: string | null
   phase: string
   enrollmentStatus: "Recruiting" | "Not Recruiting" | "Completed" | "Active"
-  startDate: string
-  participantsNeeded: number
+  startDate: string | null
+  participantsNeeded: number | null
 }
 
 function mapEnrollmentStatus(status: string | null): Trial["enrollmentStatus"] {
@@ -135,9 +137,10 @@ function ResultsPageContent() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) { setError(data.error); return }
+        if (data.error) { setError(data.error); setLoading(false); return }
         const mapped: Trial[] = (data.studies ?? []).map((s: ApiStudy, i: number) => ({
           id: String(i + 1),
+          nctId: s.nctId ?? null,
           name: s.title ?? "Untitled Trial",
           description: s.description ?? "",
           location: s.location,
@@ -151,9 +154,13 @@ function ResultsPageContent() {
         setTotal(data.total ?? mapped.length)
         setPatientSummary(data.patientSummary ?? null)
         setAiSummary(data.aiSummary ?? null)
+        setLoading(false)
       })
-      .catch((err) => { if ((err as Error).name !== "AbortError") setError(String(err)) })
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return
+        setError(String(err))
+        setLoading(false)
+      })
 
     return () => controller.abort()
   }, [uuid])

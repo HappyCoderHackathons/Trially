@@ -2,6 +2,8 @@
 
 import { useState, useRef } from "react"
 import { Paperclip, Mic, Send } from "lucide-react"
+import { useScribe } from "@elevenlabs/react";
+
 
 interface TriallySearchInputProps {
   onSubmit?: (value: string, file?: File | null) => void
@@ -24,10 +26,6 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
     }
   }
 
-  const handleAudioClick = () => {
-    setIsRecording(!isRecording)
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSend()
@@ -40,6 +38,40 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
       setInputValue("")
     }
   }
+
+  const scribe = useScribe({
+      modelId: "scribe_v2_realtime",
+      onPartialTranscript: (data) => {
+        console.log("Partial:", data.text);
+        setInputValue(data.text); // Update input in real-time
+      },
+      onCommittedTranscript: (data) => {
+        console.log("Committed:", data.text);
+        setInputValue(data.text); // Update with final committed text
+      },
+      onCommittedTranscriptWithTimestamps: (data) => {
+        console.log("Committed with timestamps:", data.text);
+        console.log("Timestamps:", data.words);
+      },
+    });
+  
+    const handleAudioClick = async () => {
+      if(!scribe.isConnected){
+      // Fetch a single use token from the server
+      const token = await fetch("/api/transcribe").then(res => res.text());
+      await scribe.connect({
+        token,
+        microphone: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      setIsRecording(true);
+      } else {
+        scribe.disconnect();
+        setIsRecording(false);
+      }
+    };
 
   return (
     <div className="w-full max-w-2xl">

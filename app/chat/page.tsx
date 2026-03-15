@@ -123,7 +123,7 @@ function ChatPageContent() {
     },
   })
 
-  // Connect to ElevenLabs on mount
+  // Connect to ElevenLabs on mount with text chat
   useEffect(() => {
     async function connect() {
       try {
@@ -141,6 +141,7 @@ function ChatPageContent() {
       conversation.endSession()
     }
   }, [])
+
 
 
   const region = process.env.NEXT_PUBLIC_COGNITO_REGION ?? "us-east-1"

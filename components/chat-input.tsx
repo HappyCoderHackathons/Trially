@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { Paperclip, Mic, Send, X } from "lucide-react"
+import { useScribe } from "@elevenlabs/react";
 
 interface ChatInputProps {
   onSend: (message: string, files: File[]) => void
@@ -13,6 +14,22 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    onPartialTranscript: (data) => {
+      console.log("Partial:", data.text);
+      setInputValue(data.text); // Update input in real-time
+    },
+    onCommittedTranscript: (data) => {
+      console.log("Committed:", data.text);
+      setInputValue(data.text); // Update with final committed text
+    },
+    onCommittedTranscriptWithTimestamps: (data) => {
+      console.log("Committed with timestamps:", data.text);
+      console.log("Timestamps:", data.words);
+    },
+  });
 
   const handleFileClick = () => {
     fileInputRef.current?.click()
@@ -31,9 +48,23 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleAudioClick = () => {
-    setIsRecording(!isRecording)
-  }
+  const handleAudioClick = async () => {
+    if(!scribe.isConnected){
+    // Fetch a single use token from the server
+    const token = await fetch("/api/transcribe").then(res => res.text());
+    await scribe.connect({
+      token,
+      microphone: {
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
+    setIsRecording(true);
+    } else {
+      scribe.disconnect();
+      setIsRecording(false);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

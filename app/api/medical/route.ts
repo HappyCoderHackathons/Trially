@@ -59,19 +59,22 @@ export async function POST(request: Request) {
   console.info("[medical] Comprehend ok summaryLength=%d resultKeys=%s", text.length, resultKeys.join(", ") || "(none)");
 
   let patient: Record<string, unknown> | null = null;
+  let patientError: string | undefined;
   const connectUrl = getConnectLlmUrl();
   if (connectUrl) {
     console.info("[medical] calling connect_llm url=%s", connectUrl.replace(/^https?:\/\/[^/]+/, "..."));
     try {
-      // connect_llm receives: patient prompt + Comprehend result + summary (text after <done>)
       patient = await connectLlm({
         summary: text,
         medicalData: result?.results ?? result,
       });
       console.info("[medical] connect_llm ok patientKeys=%s", Object.keys(patient).join(", "));
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("[medical] connect_llm error:", err);
-      // Continue without patient; response will not include it
+      patientError = msg.includes("503")
+        ? "connect_llm returned 503. API Gateway times out at 29s; the LLM often takes longer. Use CONNECT_LLM_URL pointing at the Lambda Function URL (not API Gateway) so the request can wait for the full response."
+        : `connect_llm failed: ${msg.slice(0, 120)}`;
     }
   } else {
     console.info("[medical] connect_llm skipped (no CONNECT_LLM_URL or API base)");
@@ -104,7 +107,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = patient != null ? { ...data, patient } : data;
+  const payload = {
+    ...data,
+    ...(patient != null && { patient }),
+    ...(patientError != null && { patientError }),
+  };
   console.info("[medical] stored id=%s patientInResponse=%s", data?.id ?? id, patient != null);
   return Response.json(payload, { status: 200, headers });
 }

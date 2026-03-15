@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect, useRef } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft } from "lucide-react"
@@ -21,6 +21,7 @@ interface Message {
 }
 
 function ChatPageContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const initialQuery = searchParams.get("q") || ""
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -47,7 +48,7 @@ function ChatPageContent() {
   async function sendToMedicalApi(body: {
     text: string
     operations: readonly string[]
-  }): Promise<void> {
+  }): Promise<{ id?: string; [key: string]: unknown }> {
     const res = await fetch(medicalApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -56,6 +57,7 @@ function ChatPageContent() {
     if (!res.ok) {
       throw new Error(await res.text().catch(() => `Medical API ${res.status}`))
     }
+    return res.json().catch(() => ({}))
   }
 
   // Create Conversation with Error Handling
@@ -70,7 +72,7 @@ function ChatPageContent() {
           if (text) {
             const body = { text, operations: [...medicalOperations] }
             sendToMedicalApi(body)
-              .then(() => {
+              .then((data) => {
                 setMessages((prev) => [
                   ...prev,
                   {
@@ -80,6 +82,10 @@ function ChatPageContent() {
                     timestamp: getCurrentTime(),
                   },
                 ])
+                const uuid = data?.id
+                if (uuid) {
+                  router.push(`/results?uuid=${encodeURIComponent(String(uuid))}`)
+                }
               })
               .catch((err) => {
                 console.error("Medical API error:", err)

@@ -1,151 +1,157 @@
 "use client"
 
-import { Suspense, useState, useMemo } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense, useState, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { TrialCard, Trial } from "@/components/trial-card"
 import { Pagination } from "@/components/pagination"
-import { TriallySearchInput } from "@/components/trially-search-input"
-import { BackgroundDecorations } from "@/components/background-decorations"
 import { ArrowLeft } from "lucide-react"
 
-// Mock trial data
-const mockTrials: Trial[] = [
-  {
-    id: "1",
-    name: "Phase III Cardiovascular Health Study",
-    description: "A randomized, double-blind study evaluating the efficacy of a new treatment for patients with chronic heart conditions and reduced ejection fraction.",
-    location: "Boston, MA",
-    sponsor: "CardioMed Research",
-    phase: "III",
-    enrollmentStatus: "Recruiting",
-    startDate: "Jan 2024",
-    participantsNeeded: 500,
-  },
-  {
-    id: "2",
-    name: "Diabetes Management Innovation Trial",
-    description: "Investigating a novel glucose monitoring system combined with AI-driven insulin delivery for Type 2 diabetes patients.",
-    location: "San Francisco, CA",
-    sponsor: "DiabeTech Labs",
-    phase: "II",
-    enrollmentStatus: "Recruiting",
-    startDate: "Mar 2024",
-    participantsNeeded: 300,
-  },
-  {
-    id: "3",
-    name: "Alzheimer's Disease Prevention Study",
-    description: "Long-term study examining early intervention strategies for individuals at high risk of developing Alzheimer's disease.",
-    location: "Chicago, IL",
-    sponsor: "NeuroScience Institute",
-    phase: "II",
-    enrollmentStatus: "Active",
-    startDate: "Nov 2023",
-    participantsNeeded: 1000,
-  },
-  {
-    id: "4",
-    name: "Oncology Immunotherapy Trial",
-    description: "Evaluating a combination immunotherapy approach for patients with advanced non-small cell lung cancer.",
-    location: "Houston, TX",
-    sponsor: "OncoImmune Corp",
-    phase: "III",
-    enrollmentStatus: "Recruiting",
-    startDate: "Feb 2024",
-    participantsNeeded: 450,
-  },
-  {
-    id: "5",
-    name: "Pediatric Asthma Treatment Study",
-    description: "Testing a new inhaled medication for children aged 6-12 with moderate to severe persistent asthma.",
-    location: "Philadelphia, PA",
-    sponsor: "PediCare Research",
-    phase: "II",
-    enrollmentStatus: "Not Recruiting",
-    startDate: "Sep 2023",
-    participantsNeeded: 200,
-  },
-  {
-    id: "6",
-    name: "Chronic Pain Management Trial",
-    description: "Non-opioid pain management study for patients with chronic lower back pain using nerve stimulation technology.",
-    location: "Denver, CO",
-    sponsor: "PainFree Solutions",
-    phase: "III",
-    enrollmentStatus: "Recruiting",
-    startDate: "Apr 2024",
-    participantsNeeded: 350,
-  },
-  {
-    id: "7",
-    name: "Mental Health Digital Therapeutics",
-    description: "Assessing the effectiveness of a digital cognitive behavioral therapy app for anxiety and depression.",
-    location: "Seattle, WA",
-    sponsor: "MindWell Digital",
-    phase: "II",
-    enrollmentStatus: "Active",
-    startDate: "Dec 2023",
-    participantsNeeded: 600,
-  },
-  {
-    id: "8",
-    name: "Rheumatoid Arthritis Biologic Study",
-    description: "Comparing a new biologic agent with standard treatments for moderate to severe rheumatoid arthritis.",
-    location: "New York, NY",
-    sponsor: "ArthritisCare Pharma",
-    phase: "III",
-    enrollmentStatus: "Completed",
-    startDate: "Jun 2022",
-    participantsNeeded: 400,
-  },
-  {
-    id: "9",
-    name: "Sleep Disorder Intervention Trial",
-    description: "Testing a combination of light therapy and cognitive techniques for patients with chronic insomnia.",
-    location: "Los Angeles, CA",
-    sponsor: "SleepWell Research",
-    phase: "II",
-    enrollmentStatus: "Recruiting",
-    startDate: "May 2024",
-    participantsNeeded: 250,
-  },
-]
+interface ApiStudy {
+  title: string | null
+  description: string | null
+  status: string | null
+  location: string | null
+  sponsor: string | null
+  phase: string | null
+  participants: number | null
+  startDate: string | null
+}
 
-const ITEMS_PER_PAGE = 4
+interface Trial {
+  id: string
+  name: string
+  description: string
+  location: string | null
+  sponsor: string | null
+  phase: string
+  enrollmentStatus: "Recruiting" | "Not Recruiting" | "Completed" | "Active"
+  startDate: string | null
+  participantsNeeded: number | null
+}
+
+function mapEnrollmentStatus(status: string | null): Trial["enrollmentStatus"] {
+  switch (status) {
+    case "RECRUITING": return "Recruiting"
+    case "NOT_YET_RECRUITING": return "Not Recruiting"
+    case "ACTIVE_NOT_RECRUITING": return "Active"
+    case "COMPLETED": return "Completed"
+    default: return "Not Recruiting"
+  }
+}
+
+function normalizePhase(phase: string | null): string {
+  if (!phase) return ""
+  return phase.replace(/PHASE(\d)/gi, "$1")
+}
+
+// Fully static class strings so Tailwind JIT can detect them
+const STATUS_CONFIG: Record<Trial["enrollmentStatus"], { dot: string; badge: string; accent: string }> = {
+  Recruiting:       { dot: "bg-emerald-500", badge: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800", accent: "border-l-emerald-500" },
+  "Not Recruiting": { dot: "bg-amber-400",   badge: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",             accent: "border-l-amber-400"   },
+  Active:           { dot: "bg-sky-500",      badge: "text-sky-700 bg-sky-50 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",                         accent: "border-l-sky-500"     },
+  Completed:        { dot: "bg-slate-400",    badge: "text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",             accent: "border-l-slate-400"   },
+}
+
+const ITEMS_PER_PAGE = 6
+
+function TrialResultCard({ trial }: { trial: Trial }) {
+  const cfg = STATUS_CONFIG[trial.enrollmentStatus]
+
+  const meta = [
+    trial.location,
+    trial.sponsor,
+    trial.participantsNeeded != null ? `${trial.participantsNeeded.toLocaleString()} participants` : null,
+    trial.startDate ? `Started ${trial.startDate}` : null,
+  ].filter(Boolean) as string[]
+
+  return (
+    <article
+      className={`bg-card border border-border border-l-4 ${cfg.accent} rounded-r-xl pl-5 pr-6 py-5 hover:shadow-sm transition-shadow duration-150`}
+    >
+      {/* Status badge */}
+      <div className="mb-3">
+        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+          {trial.enrollmentStatus}
+        </span>
+      </div>
+
+      {/* Title — serif for warmth and authority */}
+      <h3 className="font-serif text-[1.05rem] leading-snug text-foreground mb-2">
+        {trial.name}
+      </h3>
+
+      {/* Meta */}
+      {meta.length > 0 && (
+        <p className="text-[11px] tracking-wide text-muted-foreground mb-3">
+          {meta.join(" · ")}
+        </p>
+      )}
+
+      {/* Description */}
+      {trial.description && (
+        <p className="text-[13px] leading-[1.75] text-foreground/70">
+          {trial.description}
+        </p>
+      )}
+    </article>
+  )
+}
 
 function ResultsPageContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
-  const query = searchParams.get("q") || ""
+  const uuid = searchParams.get("uuid")
+
   const [currentPage, setCurrentPage] = useState(1)
+  const [trials, setTrials] = useState<Trial[]>([])
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [patientSummary, setPatientSummary] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
 
-  const handleSearch = (newQuery: string) => {
-    if (newQuery.trim()) {
-      router.push(`/results?q=${encodeURIComponent(newQuery)}`)
-      setCurrentPage(1)
-    }
-  }
+  useEffect(() => {
+    if (!uuid) return
+    setLoading(true)
+    setError(null)
+    setTrials([])
+    setAiSummary(null)
+    setPatientSummary(null)
 
-  const filteredTrials = useMemo(() => {
-    if (!query) return mockTrials
-    const lowerQuery = query.toLowerCase()
-    return mockTrials.filter(
-      (trial) =>
-        trial.name.toLowerCase().includes(lowerQuery) ||
-        trial.description.toLowerCase().includes(lowerQuery) ||
-        trial.location.toLowerCase().includes(lowerQuery) ||
-        trial.sponsor.toLowerCase().includes(lowerQuery)
-    )
-  }, [query])
+    fetch("/api/trials-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uuid }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) { setError(data.error); return }
+        const mapped: Trial[] = (data.studies ?? []).map((s: ApiStudy, i: number) => ({
+          id: String(i + 1),
+          name: s.title ?? "Untitled Trial",
+          description: s.description ?? "",
+          location: s.location,
+          sponsor: s.sponsor,
+          phase: normalizePhase(s.phase),
+          enrollmentStatus: mapEnrollmentStatus(s.status),
+          startDate: s.startDate,
+          participantsNeeded: s.participants,
+        }))
+        setTrials(mapped)
+        setTotal(data.total ?? mapped.length)
+        setPatientSummary(data.patientSummary ?? null)
+        setAiSummary(data.aiSummary ?? null)
+      })
+      .catch((err) => setError(String(err)))
+      .finally(() => setLoading(false))
+  }, [uuid])
 
-  const totalPages = Math.ceil(filteredTrials.length / ITEMS_PER_PAGE)
-  
+  const totalPages = Math.ceil(trials.length / ITEMS_PER_PAGE)
   const paginatedTrials = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE
-    return filteredTrials.slice(start, start + ITEMS_PER_PAGE)
-  }, [filteredTrials, currentPage])
+    return trials.slice(start, start + ITEMS_PER_PAGE)
+  }, [trials, currentPage])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -154,79 +160,106 @@ function ResultsPageContent() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Background elements */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
-      <BackgroundDecorations />
+      {/* Subtle background wash */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,hsl(var(--primary)/0.04),transparent)] pointer-events-none" />
 
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-6">
-            <Link 
-              href="/" 
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">Back</span>
-            </Link>
-            
-            <Link href="/" className="flex items-center gap-3">
-              <Image
-                src="/trially-logo.jpg"
-                alt="Trially"
-                width={36}
-                height={36}
-                className="rounded-full"
-              />
-              <span className="text-xl font-light text-primary">Trially</span>
-            </Link>
-
-            <div className="flex-1 max-w-xl ml-auto">
-              <TriallySearchInput onSubmit={handleSearch} />
-            </div>
-          </div>
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/60">
+        <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-5">
+          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Back">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/trially-logo.jpg" alt="Trially" width={26} height={26} className="rounded-full" />
+            <span className="text-base font-light tracking-wide text-primary">Trially</span>
+          </Link>
         </div>
       </header>
 
-      {/* Results Section */}
-      <section className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Results Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-foreground mb-2">
-            {query ? `Results for "${query}"` : "All Clinical Trials"}
-          </h1>
-          <p className="text-muted-foreground">
-            Found {filteredTrials.length} clinical {filteredTrials.length === 1 ? "trial" : "trials"}
-          </p>
-        </div>
+      {/* Body */}
+      <div className="max-w-2xl mx-auto px-6 py-10 pb-20">
 
-        {/* Trial Cards Grid */}
-        {paginatedTrials.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-            {paginatedTrials.map((trial) => (
-              <TrialCard key={trial.id} trial={trial} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16">
-            <p className="text-lg text-muted-foreground">
-              No trials found matching your search. Try different keywords.
-            </p>
+        {/* — No UUID — */}
+        {!uuid && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+            <p className="text-sm text-muted-foreground">No session found.</p>
+            <Link href="/" className="text-xs text-primary underline underline-offset-4">Start a new search</Link>
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+        {/* — Loading — */}
+        {uuid && loading && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-muted-foreground tracking-wide">Searching clinical trials…</p>
+          </div>
         )}
-      </section>
 
-      {/* Bottom gradient */}
-      <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
+        {/* — Error — */}
+        {uuid && !loading && error && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+            <p className="text-sm text-destructive">{error}</p>
+            <Link href="/" className="text-xs text-primary underline underline-offset-4">Start a new search</Link>
+          </div>
+        )}
+
+        {/* — Results — */}
+        {uuid && !loading && !error && (
+          <div className="space-y-8">
+
+            {/* Patient profile */}
+            {patientSummary && (
+              <section className="rounded-xl border border-border bg-muted/30 px-5 py-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
+                  Your Profile
+                </p>
+                <p className="text-[13px] leading-[1.75] text-foreground/85">{patientSummary}</p>
+              </section>
+            )}
+
+            {/* Count heading */}
+            <div className="flex items-baseline gap-2.5">
+              <span className="font-serif text-3xl text-foreground">{total}</span>
+              <span className="text-[13px] text-muted-foreground">
+                {total === 1 ? "trial matched" : "trials matched"}
+              </span>
+            </div>
+
+            {/* Trial cards */}
+            {paginatedTrials.length > 0 ? (
+              <div className="space-y-3">
+                {paginatedTrials.map((trial) => (
+                  <TrialResultCard key={trial.id} trial={trial} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-muted-foreground py-10 text-center">
+                No matching trials found for your profile.
+              </p>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            )}
+
+            {/* AI Analysis */}
+            {aiSummary && (
+              <section className="rounded-xl border border-border bg-card/50 px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
+                  AI Analysis
+                </p>
+                <p className="text-[13px] leading-[1.8] text-foreground/75 whitespace-pre-wrap">{aiSummary}</p>
+              </section>
+            )}
+
+          </div>
+        )}
+      </div>
     </main>
   )
 }
@@ -234,8 +267,8 @@ function ResultsPageContent() {
 export default function ResultsPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex flex-col bg-background items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <main className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </main>
     }>
       <ResultsPageContent />

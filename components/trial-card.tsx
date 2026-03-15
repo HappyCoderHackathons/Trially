@@ -40,9 +40,28 @@ export function TrialCard({ trial }: TrialCardProps) {
             {trial.enrollmentStatus}
           </span>
 
-          <button
+                  <button
             type="button"
-            onClick={() => setStarred((prev) => !prev)}
+            onClick={async () => {
+              const next = !starred
+              setStarred(next)
+
+              // Send to backend for persisted favorites
+              try {
+                const tokenRaw = window.localStorage.getItem("trially_cognito_session")
+                const idToken = tokenRaw ? (JSON.parse(tokenRaw) as { idToken?: string }).idToken : undefined
+                const headers: Record<string, string> = { "Content-Type": "application/json" }
+                if (idToken) headers.Authorization = `Bearer ${idToken}`
+
+                await fetch("/api/trials/star", {
+                  method: next ? "POST" : "DELETE",
+                  headers,
+                  body: JSON.stringify({ trialId: trial.id, trial }),
+                })
+              } catch (err) {
+                console.error("Failed to sync starred trial:", err)
+              }
+            }}
             className="flex items-center justify-center rounded-full p-2 text-muted-foreground hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary"
             aria-label={starred ? "Unstar trial" : "Star trial"}
           >

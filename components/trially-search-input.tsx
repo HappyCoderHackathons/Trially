@@ -129,7 +129,7 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter Text Here"
+          placeholder="Type or Speak in your Native Language"
           className="flex-1 bg-transparent text-center text-primary-foreground placeholder:text-black focus:outline-none px-4 py-2 font-mono text-sm tracking-wide"
         />
 

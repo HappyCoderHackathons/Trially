@@ -6,6 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Pagination } from "@/components/pagination"
 import { ArrowLeft } from "lucide-react"
+import { TrialCard } from "@/components/trial-card"
 
 interface ApiStudy {
   title: string | null
@@ -23,11 +24,11 @@ interface Trial {
   name: string
   description: string
   location: string | null
-  sponsor: string | null
+  sponsor: string
   phase: string
   enrollmentStatus: "Recruiting" | "Not Recruiting" | "Completed" | "Active"
-  startDate: string | null
-  participantsNeeded: number | null
+  startDate: string
+  participantsNeeded: number
 }
 
 function mapEnrollmentStatus(status: string | null): Trial["enrollmentStatus"] {
@@ -229,7 +230,7 @@ function ResultsPageContent() {
             {paginatedTrials.length > 0 ? (
               <div className="space-y-3">
                 {paginatedTrials.map((trial) => (
-                  <TrialResultCard key={trial.id} trial={trial} />
+                  <TrialCard trial={trial} />
                 ))}
               </div>
             ) : (

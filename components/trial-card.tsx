@@ -1,11 +1,12 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { MapPin, Calendar, Users, Building2, Clock } from "lucide-react"
+import { MapPin, Calendar, Users, Building2, Clock, Star } from "lucide-react"
+import { useState } from "react"
 
 export interface Trial {
   id: string
   name: string
   description: string
-  location: string
+  location: string | null
   sponsor: string
   phase: string
   enrollmentStatus: "Recruiting" | "Not Recruiting" | "Completed" | "Active"
@@ -18,6 +19,8 @@ interface TrialCardProps {
 }
 
 export function TrialCard({ trial }: TrialCardProps) {
+  const [starred, setStarred] = useState(false)
+
   const statusColors = {
     Recruiting: "bg-green-100 text-green-700",
     "Not Recruiting": "bg-amber-100 text-amber-700",
@@ -36,6 +39,17 @@ export function TrialCard({ trial }: TrialCardProps) {
           <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusColors[trial.enrollmentStatus]}`}>
             {trial.enrollmentStatus}
           </span>
+
+          <button
+            type="button"
+            onClick={() => setStarred((prev) => !prev)}
+            className="flex items-center justify-center rounded-full p-2 text-muted-foreground hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary"
+            aria-label={starred ? "Unstar trial" : "Star trial"}
+          >
+            <Star
+              className={`w-5 h-5 ${starred ? "text-amber-400" : "text-muted-foreground"}`}
+            />
+          </button>
         </div>
       </CardHeader>
       

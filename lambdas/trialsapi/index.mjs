@@ -2,6 +2,21 @@ const BASE_URL = "https://clinicaltrials.gov/api/v2";
 
 // ── Cache clients ──────────────────────────────────────────────
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+
+async function invokePipelineLogger(payload) {
+  try {
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: "pipeline-logger",
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(payload)),
+    }));
+  } catch (err) {
+    console.warn("[pipeline-logger] invoke failed:", err.message);
+  }
+}
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Redis from "ioredis";
 
@@ -902,6 +917,8 @@ export const handler = async (event) => {
     const body = getRequestBody(event);
     const query = event?.queryStringParameters ?? {};
     const patient = body.patient ?? null;
+    const uuid = body.uuid ?? null;
+    const started_at = new Date().toISOString();
     const requestedPageSize = normalizePaginationInput(
       body.pageSize ?? query.pageSize,
       "pageSize",
@@ -1020,6 +1037,24 @@ export const handler = async (event) => {
       ? filteredStudies.length > responsePageSize || Boolean(data.nextPageToken)
       : Boolean(data.nextPageToken);
     const total = patient ? filteredStudies.length : (data.totalCount ?? null);
+
+    if (uuid) {
+      await invokePipelineLogger({
+        uuid,
+        step_name: "trials_search",
+        service: "ClinicalTrials.gov",
+        model: null,
+        started_at,
+        completed_at: new Date().toISOString(),
+        metadata: JSON.stringify({
+          query_cond: search.get("query.cond") ?? null,
+          filters: { overallStatus: search.get("filter.overallStatus") ?? null },
+          raw_total: data.totalCount ?? rawCount,
+          filtered_total: filteredStudies.length,
+          cache_hit: Boolean(cached),
+        }),
+      });
+    }
 
     return {
       statusCode: 200,

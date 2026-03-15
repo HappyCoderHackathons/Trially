@@ -6,6 +6,21 @@ import {
   InferRxNormCommand,
   InferSNOMEDCTCommand,
 } from "@aws-sdk/client-comprehendmedical";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+
+async function invokePipelineLogger(payload) {
+  try {
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: "pipeline-logger",
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(payload)),
+    }));
+  } catch (err) {
+    console.warn("[pipeline-logger] invoke failed:", err.message);
+  }
+}
 
 // ── Client (reused across warm Lambda invocations) ────────────────────────────
 const client = new ComprehendMedicalClient({
@@ -63,7 +78,7 @@ function extractAndValidate(event) {
     body = event.body;
   }
 
-  const { text, operations } = body;
+  const { text, operations, uuid } = body;
 
   // Validate text
   if (!text || typeof text !== "string" || text.trim().length === 0) {
@@ -93,7 +108,7 @@ function extractAndValidate(event) {
     };
   }
 
-  return { text: text.trim(), operations: requestedOps };
+  return { text: text.trim(), operations: requestedOps, uuid: uuid ?? null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -233,7 +248,8 @@ export const handler = async (event) => {
 
   try {
     // ── 1. Validate input ──────────────────────────────────────────────────
-    const { text, operations } = extractAndValidate(event);
+    const { text, operations, uuid } = extractAndValidate(event);
+    const started_at = new Date().toISOString();
 
     console.info(`Text length: ${text.length} | Operations: [${operations.join(", ")}]`);
 
@@ -262,7 +278,29 @@ export const handler = async (event) => {
       }
     });
 
-    // ── 4. Return response ─────────────────────────────────────────────────
+    // ── 4. Log pipeline step ───────────────────────────────────────────────
+    if (uuid) {
+      const entity_counts = {};
+      for (const [key, val] of Object.entries(results)) {
+        const arr = val?.entities ?? val?.phi_entities ?? val?.medications ?? [];
+        entity_counts[key] = Array.isArray(arr) ? arr.length : 0;
+      }
+      const model_versions = {};
+      for (const [key, val] of Object.entries(results)) {
+        if (val?.model_version) model_versions[key] = val.model_version;
+      }
+      await invokePipelineLogger({
+        uuid,
+        step_name: "medical_parsing",
+        service: "AWS Comprehend Medical",
+        model: null,
+        started_at,
+        completed_at: new Date().toISOString(),
+        metadata: JSON.stringify({ operations, entity_counts, model_versions }),
+      });
+    }
+
+    // ── 5. Return response ─────────────────────────────────────────────────
     const hasErrors  = Object.keys(errors).length > 0;
     const hasResults = Object.keys(results).length > 0;
 

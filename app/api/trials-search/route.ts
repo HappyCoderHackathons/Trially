@@ -100,6 +100,7 @@ export async function POST(request: Request) {
   const searchBody = {
     patient,
     pageSize: body?.pageSize ?? 10,
+    uuid,
     ...(body?.pageToken != null && { pageToken: body.pageToken }),
   };
 
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
         const showRes = await fetch(showResultsUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model_name: showResultsModelName, trials_json: data.studies, patient_json: patient }),
+          body: JSON.stringify({ model_name: showResultsModelName, trials_json: data.studies, patient_json: patient, uuid }),
         });
         const showData = await showRes.json().catch(() => ({}));
         if (showRes.ok && showData.descriptions) {

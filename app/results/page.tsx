@@ -257,6 +257,16 @@ function ResultsPageContent() {
               </section>
             )}
 
+            {/* Transparency link */}
+            <div className="text-center pt-2">
+              <Link
+                href={`/transparency?uuid=${encodeURIComponent(uuid ?? "")}`}
+                className="text-[12px] text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
+              >
+                How did we find these?
+              </Link>
+            </div>
+
           </div>
         )}
       </div>

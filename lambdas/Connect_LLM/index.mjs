@@ -1,4 +1,19 @@
 import https from "https";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+
+async function invokePipelineLogger(payload) {
+  try {
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: "pipeline-logger",
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(payload)),
+    }));
+  } catch (err) {
+    console.warn("[pipeline-logger] invoke failed:", err.message);
+  }
+}
 
 function httpsRequest(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -53,10 +68,12 @@ function getBody(event) {
 export const handler = async (event) => {
   let model_name = event.model_name;
   let model_message = event.model_message;
+  let uuid = event.uuid ?? null;
   const body = getBody(event);
   if (body) {
     if (body.model_name != null) model_name = body.model_name;
     if (body.model_message != null) model_message = body.model_message;
+    if (body.uuid != null) uuid = body.uuid;
   }
 
   // ── Validate input ───────────────────────────────────────────────────────
@@ -69,6 +86,8 @@ export const handler = async (event) => {
       }),
     };
   }
+
+  const started_at = new Date().toISOString();
 
   // ── Call Featherless API ─────────────────────────────────────────────────
   try {
@@ -105,6 +124,22 @@ export const handler = async (event) => {
 
     const reply = data.choices[0].message.content;
     console.log("Reply:", reply);
+
+    if (uuid) {
+      await invokePipelineLogger({
+        uuid,
+        step_name: "connect_llm",
+        service: "Featherless",
+        model: model_name,
+        started_at,
+        completed_at: new Date().toISOString(),
+        metadata: JSON.stringify({
+          model: model_name,
+          prompt_length: Buffer.byteLength(model_message),
+          reply_length: Buffer.byteLength(reply),
+        }),
+      });
+    }
 
     return {
       statusCode: 200,

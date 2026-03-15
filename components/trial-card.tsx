@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Star } from "lucide-react"
+import { Save } from "lucide-react"
 import { useState } from "react"
 
 export interface Trial {
@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<Trial["enrollmentStatus"], { dot: string; badge: str
 }
 
 export function TrialCard({ trial }: TrialCardProps) {
-  const [starred, setStarred] = useState(false)
+  const [saved, setSaved] = useState(false)
   const cfg = STATUS_CONFIG[trial.enrollmentStatus]
 
   const meta = [
@@ -43,7 +43,7 @@ export function TrialCard({ trial }: TrialCardProps) {
     <article
       className={`bg-card border border-border border-l-4 ${cfg.accent} rounded-r-xl pl-5 pr-6 py-5 hover:shadow-sm transition-shadow duration-150`}
     >
-      {/* Status badge + phase + star */}
+      {/* Status badge + phase + save */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${cfg.badge}`}>
@@ -54,8 +54,8 @@ export function TrialCard({ trial }: TrialCardProps) {
                   <button
             type="button"
             onClick={async () => {
-              const next = !starred
-              setStarred(next)
+              const next = !saved
+              setSaved(next)
 
               // Send to backend for persisted favorites
               try {
@@ -64,31 +64,23 @@ export function TrialCard({ trial }: TrialCardProps) {
                 const headers: Record<string, string> = { "Content-Type": "application/json" }
                 if (idToken) headers.Authorization = `Bearer ${idToken}`
 
-                await fetch("/api/trials/star", {
+                await fetch("/api/trials/save", {
                   method: next ? "POST" : "DELETE",
                   headers,
                   body: JSON.stringify({ trialId: trial.id, trial }),
                 })
               } catch (err) {
-                console.error("Failed to sync starred trial:", err)
+                console.error("Failed to sync saved trial:", err)
               }
             }}
             className="flex items-center justify-center rounded-full p-2 text-muted-foreground hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label={starred ? "Unstar trial" : "Star trial"}
+            aria-label={saved ? "Unsave trial" : "Save trial"}
           >
-            <Star
-              className={`w-5 h-5 ${starred ? "text-amber-400" : "text-muted-foreground"}`}
+            <Save
+              className={`w-5 h-5 ${saved ? "text-amber-400" : "text-muted-foreground"}`}
             />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setStarred((prev) => !prev)}
-          className="p-1 -mr-1 rounded-md text-muted-foreground hover:text-amber-400 hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={starred ? "Unstar trial" : "Star trial"}
-        >
-          <Star className={`w-4 h-4 transition-colors ${starred ? "fill-amber-400 text-amber-400" : ""}`} />
-        </button>
       </div>
 
       {/* Title */}

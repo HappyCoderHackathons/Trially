@@ -12,7 +12,7 @@ interface TriallySearchInputProps {
 export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
   const [inputValue, setInputValue] = useState("")
   const [isRecording, setIsRecording] = useState(false)
-  const [fileName, setFileName] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileClick = () => {
@@ -20,10 +20,8 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setFileName(file.name)
-    }
+    const file = e.target.files?.[0] ?? null
+    setSelectedFile(file)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -34,8 +32,12 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
 
   const handleSend = () => {
     if (inputValue.trim()) {
-      onSubmit?.(inputValue)
+      onSubmit?.(inputValue, selectedFile ?? null)
       setInputValue("")
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }
 
@@ -125,9 +127,9 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
       </div>
 
       {/* File name indicator */}
-      {fileName && (
+      {selectedFile && (
         <p className="text-center text-sm text-muted-foreground mt-2">
-          File attached: {fileName}
+          File attached: {selectedFile.name}
         </p>
       )}
     </div>

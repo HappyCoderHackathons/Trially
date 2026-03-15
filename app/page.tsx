@@ -15,6 +15,8 @@ type StoredSession = {
   refreshToken: string
 }
 
+const PENDING_FILE_KEY = "trially_pending_file"
+
 export default function Home() {
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -56,10 +58,30 @@ export default function Home() {
     }
   }, [])
 
-  const handleSearch = (query: string) => {
-    if (query.trim()) {
-      router.push(`/chat?q=${encodeURIComponent(query)}`)
+  const handleSearch = (query: string, file?: File | null) => {
+    const trimmed = query.trim()
+    if (!trimmed) return
+
+    if (typeof window !== "undefined" && file) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const payload = {
+            name: file.name,
+            type: file.type,
+            dataUrl: reader.result as string,
+          }
+          window.sessionStorage.setItem(PENDING_FILE_KEY, JSON.stringify(payload))
+        } catch {
+          // If serialization fails, just fall back to sending query only
+        }
+        router.push(`/chat?q=${encodeURIComponent(trimmed)}`)
+      }
+      reader.readAsDataURL(file)
+      return
     }
+
+    router.push(`/chat?q=${encodeURIComponent(trimmed)}`)
   }
 
   const handleSignOut = () => {

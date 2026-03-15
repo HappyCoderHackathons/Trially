@@ -18,6 +18,8 @@ interface Message {
   timestamp: string
 }
 
+const PENDING_FILE_KEY = "trially_pending_file"
+
 function ChatPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -232,26 +234,86 @@ function ChatPageContent() {
     return pieces.join("\n\n")
   }
 
-  // Send initial query once session is connected
+  // Send initial query (and any pending attached file) once session is connected
   useEffect(() => {
     if (
-      conversation.status === "connected" &&
-      initialQuery &&
-      !initialQuerySent.current
+      conversation.status !== "connected" ||
+      !initialQuery ||
+      initialQuerySent.current
     ) {
-      initialQuerySent.current = true
-      setMessages([
+      return
+    }
+
+    initialQuerySent.current = true
+
+    async function sendInitialMessage() {
+      let combinedContent = initialQuery
+      const files: File[] = []
+
+      if (typeof window !== "undefined") {
+        const raw = window.sessionStorage.getItem(PENDING_FILE_KEY)
+        if (raw) {
+          window.sessionStorage.removeItem(PENDING_FILE_KEY)
+          try {
+            const parsed = JSON.parse(raw) as {
+              name?: string
+              type?: string
+              dataUrl?: string
+            }
+            if (parsed?.dataUrl && parsed?.name) {
+              const res = await fetch(parsed.dataUrl)
+              const blob = await res.blob()
+              const file = new File([blob], parsed.name, {
+                type: parsed.type || blob.type,
+              })
+              files.push(file)
+            }
+          } catch (e) {
+            console.error("Failed to restore pending file:", e)
+          }
+        }
+      }
+
+      if (files.length > 0) {
+        setProcessingStatus("Extracting text from documents…")
+        try {
+          const extractedText = await extractTextFromFiles(files)
+          if (extractedText.trim()) {
+            combinedContent = `${initialQuery}\n\n---\nAttached documents text:\n${extractedText}`
+          }
+        } catch (e) {
+          const err = e instanceof Error ? e.message : String(e)
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              content: err.includes("signed in")
+                ? "Please sign in to extract text from attached documents, then try again."
+                : "Document text extraction failed. You can still continue chatting without it.",
+              sender: "ai",
+              timestamp: getCurrentTime(),
+            },
+          ])
+        } finally {
+          setProcessingStatus(null)
+        }
+      }
+
+      setMessages((prev) => [
+        ...prev,
         {
           id: crypto.randomUUID(),
-          content: initialQuery,
+          content: combinedContent,
           sender: "user",
           timestamp: getCurrentTime(),
         },
       ])
       setIsTyping(true)
-      conversation.sendUserMessage(initialQuery)
+      conversation.sendUserMessage(combinedContent)
     }
-  }, [conversation.status, initialQuery])
+
+    void sendInitialMessage()
+  }, [conversation, initialQuery])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {

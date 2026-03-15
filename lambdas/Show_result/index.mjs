@@ -151,9 +151,10 @@ export const handler = async (event) => {
 
 Rules:
 - Address the patient directly ("This trial...", "Given your condition...", "You may want to prioritize...").
+- Always refer to trials by their full title/name (e.g. "The [exact trial name] trial..." or "...[trial name]..."). Never refer to trials by number (e.g. "Trial 1", "the first trial", "trial #2").
 - For each trial: one to two sentences on why it is or is not a strong fit for this patient specifically. Skip generic facts already visible in the listing.
-- End with a single closing sentence on what to do next (e.g. speak to their doctor, contact the sponsor). 
-- No emojis. No bullet points. No trial numbering. 
+- End with a single closing sentence on what to do next (e.g. speak to their doctor, contact the sponsor).
+- No emojis. No bullet points. No trial numbering.
 - Do not warn the patient to discuss these options with their doctor. The UI makes this VERY clear.
 - Be terse. Total response under 220 words.`;
 

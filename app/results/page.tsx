@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Pagination } from "@/components/pagination"
 import { AppHeader } from "@/components/app-header"
+import { Skeleton } from "@/components/ui/skeleton"
 import { TrialCard } from "@/components/trial-card"
 
 interface ApiStudy {
@@ -115,7 +116,6 @@ function ResultsPageContent() {
   const [rawStudies, setRawStudies] = useState<ApiStudy[]>([])
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
-  const [patientSummary, setPatientSummary] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
@@ -130,7 +130,6 @@ function ResultsPageContent() {
     setTrials([])
     setRawStudies([])
     setAiSummary(null)
-    setPatientSummary(null)
 
     fetch("/api/trials-search", {
       method: "POST",
@@ -157,7 +156,6 @@ function ResultsPageContent() {
         setTrials(mapped)
         setRawStudies(raw)
         setTotal(data.total ?? mapped.length)
-        setPatientSummary(data.patientSummary ?? null)
         setLoading(false)
       })
       .catch((err) => {
@@ -231,9 +229,31 @@ function ResultsPageContent() {
 
         {/* — Loading — */}
         {uuid && loading && (
-          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs text-muted-foreground tracking-wide">Searching clinical trials…</p>
+          <div className="space-y-8">
+            <div className="flex items-baseline gap-2.5">
+              <Skeleton className="h-9 w-12 rounded" />
+              <Skeleton className="h-4 w-28 rounded" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-r-xl border border-border border-l-4 border-l-border bg-card pl-5 pr-6 py-5"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex gap-2">
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                    </div>
+                  </div>
+                  <Skeleton className="mb-2 h-4 w-full max-w-[90%] rounded" />
+                  <Skeleton className="mb-3 h-3 w-3/4 rounded" />
+                  <Skeleton className="h-3 w-full rounded" />
+                  <Skeleton className="mt-1.5 h-3 w-full rounded" />
+                  <Skeleton className="mt-1 h-3 w-5/6 rounded" />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -248,16 +268,6 @@ function ResultsPageContent() {
         {/* — Results — */}
         {uuid && !loading && !error && (
           <div className="space-y-8">
-
-            {/* Patient profile */}
-            {patientSummary && (
-              <section className="rounded-xl border border-border bg-muted/30 px-5 py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
-                  Your Profile
-                </p>
-                <p className="text-[13px] leading-[1.75] text-foreground/85">{patientSummary}</p>
-              </section>
-            )}
 
             {/* Count heading */}
             <div className="flex items-baseline gap-2.5">

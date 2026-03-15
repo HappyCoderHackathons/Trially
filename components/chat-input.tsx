@@ -3,9 +3,10 @@
 import { useState, useRef } from "react"
 import { Paperclip, Mic, Send, X } from "lucide-react"
 import { useScribe } from "@elevenlabs/react";
+import { parseFHIRFile, type FHIRBundle } from "@/lib/fhir"
 
 interface ChatInputProps {
-  onSend: (message: string, files: File[]) => void
+  onSend: (message: string, files: File[], fhirBundles: Map<string, FHIRBundle>) => void
   disabled?: boolean
 }
 
@@ -13,6 +14,8 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   const [inputValue, setInputValue] = useState("")
   const [isRecording, setIsRecording] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [fhirBundles, setFhirBundles] = useState<Map<string, FHIRBundle>>(new Map()) //?
+  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map()) //?
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const scribe = useScribe({
@@ -35,13 +38,34 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
     fileInputRef.current?.click()
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async(e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) {
       setSelectedFiles([])
       return
     }
-    setSelectedFiles(Array.from(files))
+    //setSelectedFiles(Array.from(files))
+    const incoming = Array.from(files)
+    const newBundles = new Map(fhirBundles)
+    const newErrors = new Map(fileErrors)
+
+    await Promise.all(
+      incoming.map(async (file) => {
+        if (file.name.endsWith(".json") || file.name.endsWith(".xml")) {
+          const result = await parseFHIRFile(file)
+          if (result.valid) {
+            newBundles.set(file.name, result.bundle)
+            newErrors.delete(file.name)
+          } else {
+            newErrors.set(file.name, result.error)
+          }
+        }
+      })
+    )
+    setFhirBundles(newBundles)
+    setFileErrors(newErrors)
+    setSelectedFiles(incoming)
+
   }
 
   const removeFile = (index: number) => {
@@ -75,9 +99,10 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 
   const handleSend = () => {
     if (inputValue.trim() && !disabled) {
-      onSend(inputValue.trim(), selectedFiles)
+      onSend(inputValue.trim(), selectedFiles, fhirBundles)
       setInputValue("")
       setSelectedFiles([])
+      setFhirBundles(new Map())
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
@@ -88,24 +113,33 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
     <div className="w-full space-y-2">
       {selectedFiles.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {selectedFiles.map((file, index) => (
-            <span
-              key={`${file.name}-${index}`}
-              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-sm text-muted-foreground"
-            >
-              <span className="max-w-[180px] truncate" title={file.name}>
-                {file.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeFile(index)}
-                className="rounded-full p-0.5 hover:bg-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-ring"
-                aria-label={`Remove ${file.name}`}
+          {selectedFiles.map((file, index) => {
+            const isFHIR = fhirBundles.has(file.name)
+            const error = fileErrors.get(file.name)
+            return (
+              <span
+                key={`${file.name}-${index}`}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm ${error ? "bg-red-100 text-red-700" : "bg-muted text-muted-foreground"}`}
               >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </span>
-          ))}
+                {isFHIR && (
+                  <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-xs text-white font-medium">
+                    FHIR
+                  </span>
+                )}
+                <span className="max-w-[180px] truncate" title={file.name}>
+                  {error ? `${file.name}: ${error}` : file.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  className="rounded-full p-0.5 hover:bg-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            )
+          })}
         </div>
       )}
       <div className="relative flex items-center bg-primary rounded-full px-2 py-2 shadow-lg">
@@ -123,7 +157,7 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
           type="file"
           ref={fileInputRef}
           className="hidden"
-          accept=".pdf,.doc,.docx,.txt,.jpg,.png"
+          accept=".pdf,.doc,.docx,.txt,.jpg,.png,.json,.xml"
           multiple
           onChange={handleFileChange}
         />

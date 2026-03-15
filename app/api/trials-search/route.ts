@@ -5,7 +5,7 @@ const medicalGetUrl =
   process.env.MEDICAL_GET_API_URL?.trim() || (apiBase ? `${apiBase}/medical/get` : "");
 const showResultsUrl = process.env.SHOW_RESULTS_API_URL?.trim() || "";
 const showResultsModelName =
-  process.env.SHOW_RESULTS_MODEL_NAME?.trim() || "meta-llama/Meta-Llama-3.1-8B-Instruct";
+  process.env.SHOW_RESULTS_MODEL_NAME?.trim() || "deepseek-ai/DeepSeek-R1-Distill-Llama-70B";
 
 const headers = { "Access-Control-Allow-Origin": "*" as const };
 

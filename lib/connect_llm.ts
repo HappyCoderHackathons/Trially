@@ -12,6 +12,8 @@ export type ConnectLlmOptions = {
   systemPrompt?: string;
   /** Override user prompt; default is built from summary + medicalData. */
   userPrompt?: string;
+  /** Session UUID for pipeline transparency logging. */
+  uuid?: string;
 };
 
 /**
@@ -24,6 +26,7 @@ export async function connectLlm(options: ConnectLlmOptions): Promise<Record<str
     medicalData,
     systemPrompt = PATIENT_FROM_SUMMARY_SYSTEM,
     userPrompt = buildPatientFromSummaryUserPrompt(summary, medicalData),
+    uuid,
   } = options;
 
   const medicalKeys =
@@ -32,7 +35,7 @@ export async function connectLlm(options: ConnectLlmOptions): Promise<Record<str
       : [];
   console.info("[connect_llm] input: summary length=%d, medicalData keys=%s", summary.length, medicalKeys.join(", ") || "(none)");
 
-  const content = await callLlm(systemPrompt, userPrompt);
+  const content = await callLlm(systemPrompt, userPrompt, uuid);
   console.info("[connect_llm] reply length=%d", content.length);
 
   const patient = parsePatientJson(content);
@@ -48,24 +51,25 @@ export function getConnectLlmUrl(): string | null {
   return base ? `${base}/connect` : null;
 }
 
-async function callLlm(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callLlm(systemPrompt: string, userPrompt: string, uuid?: string): Promise<string> {
   const url = getConnectLlmUrl();
   if (!url) {
     throw new Error(
       "LLM not configured: set CONNECT_LLM_URL or NEXT_PUBLIC_CHAT_API_URL (for /connect)."
     );
   }
-  return callLlmViaUrl(url, systemPrompt, userPrompt);
+  return callLlmViaUrl(url, systemPrompt, userPrompt, uuid);
 }
 
 async function callLlmViaUrl(
   url: string,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  uuid?: string
 ): Promise<string> {
   const modelName = process.env.CONNECT_LLM_MODEL ?? "Qwen/Qwen2.5-72B-Instruct";
   const modelMessage = `${systemPrompt}\n\n${userPrompt}`;
-  const body = { model_name: modelName, model_message: modelMessage };
+  const body = { model_name: modelName, model_message: modelMessage, ...(uuid && { uuid }) };
   console.info("[connect_llm] POST %s model=%s messageLength=%d", url.replace(/^https?:\/\/[^/]+/, "..."), modelName, modelMessage.length);
 
   const res = await fetch(url, {

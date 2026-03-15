@@ -32,10 +32,12 @@ export async function POST(request: Request) {
       ? body.text.slice(0, MAX_MEDICAL_TEXT_LENGTH)
       : body.text;
 
+  const id = crypto.randomUUID();
+
   const medicalRes = await fetch(medicalApiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, operations: body.operations }),
+    body: JSON.stringify({ text, operations: body.operations, uuid: id }),
   });
   const result = await medicalRes.json().catch(() => ({}));
   if (!medicalRes.ok) {
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
       patient = await connectLlm({
         summary: text,
         medicalData: result?.results ?? result,
+        uuid: id,
       });
       console.info("[medical] connect_llm ok patientKeys=%s", Object.keys(patient).join(", "));
     } catch (err) {
@@ -87,7 +90,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const id = crypto.randomUUID();
   const storeRes = await fetch(medicalProcessUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

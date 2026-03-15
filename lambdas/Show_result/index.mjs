@@ -1,4 +1,19 @@
 import https from "https";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+
+async function invokePipelineLogger(payload) {
+  try {
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: "pipeline-logger",
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(payload)),
+    }));
+  } catch (err) {
+    console.warn("[pipeline-logger] invoke failed:", err.message);
+  }
+}
 
 function httpsRequest(url, options, body) {
   return new Promise((resolve, reject) => {
@@ -54,7 +69,8 @@ function getBody(event) {
 }
 
 export const handler = async (event) => {
-  const { model_name, trials_json, patient_json } = getBody(event);
+  const { model_name, trials_json, patient_json, uuid } = getBody(event);
+  const started_at = new Date().toISOString();
 
   // ── Validate input ───────────────────────────────────────────────────────
   if (!model_name) {
@@ -186,6 +202,18 @@ Rules:
 
     const reply = data.choices[0].message.content + "\n\nTo proceed, I recommend discussing these options with your doctor to determine the best course of action and to see if any of these trials may be a suitable fit for you.";
     console.log("Reply:", reply);
+
+    if (uuid) {
+      await invokePipelineLogger({
+        uuid,
+        step_name: "show_result",
+        service: "Featherless",
+        model: model_name,
+        started_at,
+        completed_at: new Date().toISOString(),
+        metadata: JSON.stringify({ model: model_name, trials_processed: trialCount }),
+      });
+    }
 
     return {
       statusCode: 200,

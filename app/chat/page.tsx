@@ -249,7 +249,8 @@ function ChatPageContent() {
     initialQuerySent.current = true
 
     async function sendInitialMessage() {
-      let combinedContent = initialQuery
+      let messageForAI = initialQuery
+      let displayContent = initialQuery
       const files: File[] = []
 
       if (typeof window !== "undefined") {
@@ -281,7 +282,12 @@ function ChatPageContent() {
         try {
           const extractedText = await extractTextFromFiles(files)
           if (extractedText.trim()) {
-            combinedContent = `${initialQuery}\n\n---\nAttached documents text:\n${extractedText}`
+            messageForAI = `${initialQuery}\n\n---\nAttached documents text:\n${extractedText}`
+            const fileNames = files.map((f) => f.name)
+            displayContent =
+              fileNames.length > 0
+                ? `${initialQuery}\n\n📎 ${fileNames.join(", ")}`
+                : initialQuery
           }
         } catch (e) {
           const err = e instanceof Error ? e.message : String(e)
@@ -305,13 +311,13 @@ function ChatPageContent() {
         ...prev,
         {
           id: crypto.randomUUID(),
-          content: combinedContent,
+          content: displayContent,
           sender: "user",
           timestamp: getCurrentTime(),
         },
       ])
       setIsTyping(true)
-      conversation.sendUserMessage(combinedContent)
+      conversation.sendUserMessage(messageForAI)
     }
 
     void sendInitialMessage()

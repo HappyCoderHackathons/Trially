@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Paperclip, Mic, Send } from "lucide-react"
+import { Paperclip, Mic, Send, X } from "lucide-react"
 import { useScribe } from "@elevenlabs/react";
 
 
@@ -22,6 +22,13 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
     setSelectedFile(file)
+  }
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -76,7 +83,28 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
     };
 
   return (
-    <div className="w-full max-w-2xl">
+    <div className="w-full max-w-2xl space-y-2">
+      {/* Attached file chip */}
+      {selectedFile && (
+        <div className="flex flex-wrap gap-2">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm bg-muted text-muted-foreground"
+          >
+            <span className="max-w-[180px] truncate" title={selectedFile.name}>
+              {selectedFile.name}
+            </span>
+            <button
+              type="button"
+              onClick={handleRemoveFile}
+              className="rounded-full p-0.5 hover:bg-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label={`Remove ${selectedFile.name}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
+
       <div className="relative flex items-center bg-primary rounded-full px-2 py-2 shadow-lg">
         {/* File Upload Button */}
         <button
@@ -125,13 +153,6 @@ export function TriallySearchInput({ onSubmit }: TriallySearchInputProps) {
           <Send className="w-4 h-4" />
         </button>
       </div>
-
-      {/* File name indicator */}
-      {selectedFile && (
-        <p className="text-center text-sm text-muted-foreground mt-2">
-          File attached: {selectedFile.name}
-        </p>
-      )}
     </div>
   )
 }

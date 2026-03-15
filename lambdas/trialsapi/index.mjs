@@ -29,7 +29,7 @@ function getRedis() {
   if (!_redis) {
     _redis = new Redis({
       host: process.env.ELASTICACHE_HOST,
-      port: 6379,
+      port: 6380,
       tls: {},
       connectTimeout: 2000,
       commandTimeout: 1000,

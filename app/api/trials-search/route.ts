@@ -3,6 +3,9 @@ const trialsSearchUrl =
   process.env.TRIALS_SEARCH_API_URL?.trim() || (apiBase ? `${apiBase}/search` : "");
 const medicalGetUrl =
   process.env.MEDICAL_GET_API_URL?.trim() || (apiBase ? `${apiBase}/medical/get` : "");
+const showResultsUrl = process.env.SHOW_RESULTS_API_URL?.trim() || "";
+const showResultsModelName =
+  process.env.SHOW_RESULTS_MODEL_NAME?.trim() || "meta-llama/Meta-Llama-3.1-8B-Instruct";
 
 const headers = { "Access-Control-Allow-Origin": "*" as const };
 
@@ -119,7 +122,27 @@ export async function POST(request: Request) {
       data.total ?? "?",
       data.studies?.length ?? 0
     );
-    return Response.json(data, { status: 200, headers });
+
+    let aiSummary: string | null = null;
+    if (showResultsUrl && Array.isArray(data.studies) && data.studies.length > 0) {
+      try {
+        const showRes = await fetch(showResultsUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model_name: showResultsModelName, trials_json: data.studies }),
+        });
+        const showData = await showRes.json().catch(() => ({}));
+        if (showRes.ok && showData.descriptions) {
+          aiSummary = showData.descriptions;
+        } else {
+          console.warn("[trials-search] show_result %s %s", showRes.status, JSON.stringify(showData).slice(0, 200));
+        }
+      } catch (err) {
+        console.warn("[trials-search] show_result error:", err);
+      }
+    }
+
+    return Response.json({ ...data, ...(aiSummary != null && { aiSummary }) }, { status: 200, headers });
   } catch (err) {
     console.error("[trials-search] error:", err);
     return Response.json(

@@ -28,10 +28,56 @@ Patient schema (use only keys that you can infer; omit keys you do not know):
 - insurance: { provider?, plan?, coverageType? }
 - consent: { informedConsent?, consentDate?, dataSharing? }
 
-Prefer mapping from the structured medical extraction. For diagnosis.primary use the condition NAME (e.g. from the summary or the ICD-10 description like "Rheumatoid arthritis, unspecified"), never the raw ICD-10 code—trial search requires a name. Use RxNorm/SNOMED for medications and conditions. Use the summary to fill gaps. Output only valid JSON.`;
+Prefer mapping from the structured medical extraction. For diagnosis.primary use the condition NAME (e.g. from the summary or the ICD-10 description like "Rheumatoid arthritis, unspecified"), never the raw ICD-10 code—trial search requires a name. You MUST set diagnosis.primary (or diagnosis as a string) to at least one condition/disease name so that clinical trial search can return results; if the summary mentions no specific condition, use the main symptom or reason for visit as the primary. Use RxNorm/SNOMED for medications and conditions. Use the summary to fill gaps. Output only valid JSON.`;
+
+type RawEntity = { Text?: string; Category?: string; Type?: string; [k: string]: unknown }
+type RawIcd10  = { Text?: string; Categories?: Array<{ Code?: string; Description?: string }> }
+type RawRxNorm = { Text?: string; RxNormConcepts?: Array<{ Description?: string }> }
+type RawSnomed = { Text?: string; SNOMEDCTConcepts?: Array<{ Code?: string; Description?: string }> }
+
+/**
+ * Strip noise (offsets, IDs, confidence scores, traits) from Comprehend Medical
+ * output so the LLM prompt stays well within context limits.
+ */
+function slimMedicalData(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const d = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  if (Array.isArray(d.medical_entities)) {
+    const seen = new Set<string>();
+    out.medical_entities = (d.medical_entities as RawEntity[])
+      .map(e => ({ text: e.Text, category: e.Category, type: e.Type }))
+      .filter(e => { const k = `${e.text}|${e.type}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  if (Array.isArray(d.phi_data)) {
+    out.phi_data = (d.phi_data as RawEntity[]).map(e => ({ text: e.Text, type: e.Type }));
+  }
+  if (Array.isArray(d.icd10_codes)) {
+    out.icd10_codes = (d.icd10_codes as RawIcd10[]).map(e => ({
+      text: e.Text,
+      code: e.Categories?.[0]?.Code,
+      description: e.Categories?.[0]?.Description,
+    }));
+  }
+  if (Array.isArray(d.rx_norm)) {
+    out.rx_norm = (d.rx_norm as RawRxNorm[]).map(e => ({
+      text: e.Text,
+      description: e.RxNormConcepts?.[0]?.Description,
+    }));
+  }
+  if (Array.isArray(d.snomed_ct)) {
+    out.snomed_ct = (d.snomed_ct as RawSnomed[]).map(e => ({
+      text: e.Text,
+      code: e.SNOMEDCTConcepts?.[0]?.Code,
+      description: e.SNOMEDCTConcepts?.[0]?.Description,
+    }));
+  }
+  return out;
+}
 
 export function buildPatientFromSummaryUserPrompt(summary: string, medicalData: unknown): string {
-  const medicalJson =
-    typeof medicalData === "string" ? medicalData : JSON.stringify(medicalData, null, 2);
+  const slim = slimMedicalData(medicalData);
+  const medicalJson = typeof slim === "string" ? slim : JSON.stringify(slim);
   return `Summary:\n${summary}\n\nStructured medical data (use this to populate the patient object):\n${medicalJson}\n\nOutput the single patient JSON object only.`;
 }

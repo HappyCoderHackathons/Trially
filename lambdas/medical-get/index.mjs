@@ -1,7 +1,10 @@
-import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 
 const TABLE_NAME = process.env.MEDICAL_RESULTS_TABLE ?? "trially-medical-results";
-const dynamo = new DynamoDBClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+const dynamo = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env.AWS_REGION ?? "us-east-1" })
+);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,9 +57,9 @@ export const handler = async (event) => {
 
   try {
     const res = await dynamo.send(
-      new GetItemCommand({
+      new GetCommand({
         TableName: TABLE_NAME,
-        Key: { id: { S: uuid } },
+        Key: { id: uuid },
       })
     );
     const raw = res.Item;
@@ -64,20 +67,25 @@ export const handler = async (event) => {
       return response(404, { error: "Record not found", uuid });
     }
 
-    const item = {
-      id: raw.id?.S ?? uuid,
-      createdAt: raw.createdAt?.S ?? null,
-      input: raw.input?.S ?? null,
-      result: raw.result?.S ?? null,
-      patient: null,
-    };
-    if (raw.patient?.S) {
-      try {
-        item.patient = JSON.parse(raw.patient.S);
-      } catch {
-        item.patient = null;
+    const parseIfString = (v) => {
+      if (v == null) return null;
+      if (typeof v === "string") {
+        try {
+          return JSON.parse(v);
+        } catch {
+          return v;
+        }
       }
-    }
+      return v;
+    };
+
+    const item = {
+      id: raw.id ?? uuid,
+      createdAt: raw.createdAt ?? null,
+      input: parseIfString(raw.input) ?? (typeof raw.input === "object" && raw.input !== null ? raw.input : null),
+      result: parseIfString(raw.result) ?? (typeof raw.result === "object" && raw.result !== null ? raw.result : null),
+      patient: parseIfString(raw.patient) ?? (typeof raw.patient === "object" && raw.patient !== null ? raw.patient : null),
+    };
 
     return response(200, item);
   } catch (err) {

@@ -29,6 +29,20 @@ const TABLE_NAME    = "ClinicalTrialsCache";
 const VALKEY_TTL    = 3600;       // 1 hour
 const DYNAMO_TTL_HR = 24;         // 24 hours
 
+function itemToData(item) {
+  if (item.studies != null) {
+    return {
+      studies: item.studies ?? [],
+      nextPageToken: item.nextPageToken ?? null,
+      totalCount: item.totalCount ?? null,
+    };
+  }
+  if (item.data != null) {
+    return typeof item.data === "string" ? JSON.parse(item.data) : item.data;
+  }
+  return null;
+}
+
 async function getCached(key) {
   // 1. Valkey first
   try {
@@ -37,15 +51,20 @@ async function getCached(key) {
   } catch (e) { console.warn("Valkey GET failed:", e.message); }
 
   // 2. DynamoDB fallback
-  const result = await dynamo.send(
-    new GetCommand({ TableName: TABLE_NAME, Key: { cacheKey: key } })
-  );
-  if (result.Item) {
-    const data = JSON.parse(result.Item.data);
-    // Backfill Valkey
-    try { await getRedis().set(`trials:${key}`, JSON.stringify(data), "EX", VALKEY_TTL); }
-    catch (e) { console.warn("Valkey backfill failed:", e.message); }
-    return { source: "dynamodb", data };
+  try {
+    const result = await dynamo.send(
+      new GetCommand({ TableName: TABLE_NAME, Key: { cacheKey: key } })
+    );
+    if (result.Item) {
+      const data = itemToData(result.Item);
+      if (data) {
+        try { await getRedis().set(`trials:${key}`, JSON.stringify(data), "EX", VALKEY_TTL); }
+        catch (e) { console.warn("Valkey backfill failed:", e.message); }
+        return { source: "dynamodb", data };
+      }
+    }
+  } catch (e) {
+    console.warn("DynamoDB GET failed:", e.message);
   }
 
   return null;
@@ -520,6 +539,22 @@ function matchesAnyTerm(text, values) {
   return (values ?? []).some((value) => normalizedText.includes(String(value).toLowerCase()));
 }
 
+/** Expand condition terms so we also match key substrings (e.g. "heart failure" from "Heart Failure with Reduced Ejection Fraction (HFrEF)"). API already filtered by query.cond; we avoid over-filtering by requiring only a meaningful substring. */
+function conditionTermsForMatching(conditionTerms) {
+  const out = new Set();
+  for (const term of conditionTerms ?? []) {
+    const s = String(term).trim();
+    if (!s) continue;
+    out.add(s.toLowerCase());
+    const inParen = s.match(/\(([^)]+)\)$/);
+    if (inParen) out.add(inParen[1].trim().toLowerCase());
+    const words = s.split(/\s+/).filter((w) => w.length > 1);
+    if (words.length >= 2) out.add(words.slice(0, 2).join(" ").toLowerCase());
+    else if (words.length === 1) out.add(words[0].toLowerCase());
+  }
+  return [...out];
+}
+
 function computeDistanceMiles(lat1, lon1, lat2, lon2) {
   const toRadians = (degrees) => (degrees * Math.PI) / 180;
   const earthRadiusMiles = 3958.8;
@@ -662,9 +697,11 @@ function matchesStudyCondition(study, conditionTerms) {
   if (!conditionTerms || conditionTerms.length === 0) {
     return true;
   }
-
+  // We already sent query.cond to the API, so returned studies are condition-relevant. Prefer text match but allow studies when text is missing (API v2 shape may vary).
   const text = getStudyText(study);
-  return matchesAnyTerm(text, conditionTerms);
+  if (!text || text.length < 2) return true;
+  const termsToMatch = conditionTermsForMatching(conditionTerms);
+  return matchesAnyTerm(text, termsToMatch);
 }
 
 function matchesHealthyVolunteerPreference(study, context) {
@@ -733,13 +770,23 @@ function filterAndRankStudies(studies, patient) {
     .sort((left, right) => right.score - left.score || String(left.study.protocolSection?.identificationModule?.nctId ?? "").localeCompare(String(right.study.protocolSection?.identificationModule?.nctId ?? "")));
 }
 
+function collectConditionTermsWithFallback(patient) {
+  const terms = collectConditionTerms(patient);
+  if (terms.length > 0) return terms;
+  const fallbacks = createTermCollector();
+  fallbacks.addAll(patient.symptoms?.current);
+  fallbacks.add((patient.comorbidities ?? [])[0]?.condition);
+  fallbacks.add((patient.familyHistory ?? [])[0]?.condition);
+  return fallbacks.toArray();
+}
+
 function buildParamsFromPatient(patient, pageSize = 100) {
   const params = new URLSearchParams();
-  const conditionTerms = collectConditionTerms(patient);
+  const conditionTerms = collectConditionTermsWithFallback(patient);
   const advancedFilter = buildAdvancedFilter(patient);
   const primaryDiagnosis = getPrimaryDiagnosis(patient);
 
-  // Condition
+  // Condition — require at least one term so the API returns meaningful results
   if (conditionTerms.length > 0) {
     params.set(
       "query.cond",
@@ -919,6 +966,15 @@ export const handler = async (event) => {
 
     const url = `${BASE_URL}/studies?${search.toString()}`;
 
+    if (patient) {
+      const cond = search.get("query.cond");
+      console.log(
+        "[trialsapi] patient search query.cond=%s pageSize=%s",
+        cond ?? "(none)",
+        search.get("pageSize"),
+      );
+    }
+
     // ── Cache lookup ──────────────────────────────────────────
     const cacheKey = Buffer.from(search.toString()).toString("base64");
     const cached = await getCached(cacheKey);
@@ -942,10 +998,21 @@ export const handler = async (event) => {
       data = await res.json();
       await setCached(cacheKey, data);
     }
-    // ─────────────────────────────────────────────────────────
-    const filteredStudies = patient
+
+    const rawCount = data.studies?.length ?? 0;
+    const skipFilter = patient && rawCount < 10;
+    const filteredStudies = patient && !skipFilter
       ? filterAndRankStudies(data.studies ?? [], patient)
       : (data.studies ?? []).map((study) => ({ study }));
+    if (patient && rawCount > 0) {
+      console.log(
+        "[trialsapi] studies raw=%d after filter/rank=%d%s",
+        rawCount,
+        filteredStudies.length,
+        skipFilter ? " (filter skipped, raw < 10)" : "",
+      );
+    }
+    // ─────────────────────────────────────────────────────────
     const studies = filteredStudies
       .slice(0, responsePageSize)
       .map((item) => mapStudy(item.study));

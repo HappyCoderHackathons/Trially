@@ -7,6 +7,7 @@ import { TriallyLogo } from "@/components/trially-logo"
 import { TriallySearchInput } from "@/components/trially-search-input"
 import { BackgroundDecorations } from "@/components/background-decorations"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 type StoredSession = {
   idToken: string
@@ -71,6 +72,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
+      {/* Theme toggle – fixed top-right */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
+
       {/* Subtle background gradient overlay */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
 
@@ -97,7 +103,7 @@ export default function Home() {
             </div>
           ) : (
             <Link href="/auth">
-              <Button variant="outline" size="lg">
+              <Button variant="outline" size="lg" className="dark:bg-yellow-400 dark:text-yellow-950 dark:border-yellow-400 dark:hover:bg-yellow-300 dark:hover:border-yellow-300">
                 Log in / Sign up
               </Button>
             </Link>

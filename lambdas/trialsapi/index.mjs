@@ -602,6 +602,22 @@ function normalizePatientSex(sex) {
   return null;
 }
 
+const ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+
+function normalizePhaseValue(value) {
+  if (typeof value !== "string") return null;
+  const s = value.trim().toUpperCase().replace(/\s+/g, "");
+  // Already PHASE1 format
+  if (/^PHASE\d+$/.test(s)) return s;
+  // Contains a digit: "phase2", "2"
+  const digit = s.match(/(\d+)/);
+  if (digit) return `PHASE${digit[1]}`;
+  // Roman numerals at end: "PHASEI", "PHASEII", "II", "III", "IV"
+  const roman = s.match(/(IV|III|II|I|V)$/);
+  if (roman && ROMAN[roman[1]]) return `PHASE${ROMAN[roman[1]]}`;
+  return null;
+}
+
 function buildPatientContext(patient) {
   return {
     patient,
@@ -616,9 +632,9 @@ function buildPatientContext(patient) {
     outcomeTerms: collectOutcomeTerms(patient),
     focusedKeywordTerms: collectFocusedKeywordTerms(patient),
     generalTerms: collectGeneralTerms(patient),
-    preferredPhases: (patient.trialPreferences?.preferredPhases ?? []).filter(
-      Boolean,
-    ),
+    preferredPhases: (patient.trialPreferences?.preferredPhases ?? [])
+      .map(normalizePhaseValue)
+      .filter(Boolean),
     healthyVolunteer: patient.demographics?.isHealthyVolunteer ?? null,
   };
 }

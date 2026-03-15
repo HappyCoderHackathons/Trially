@@ -54,7 +54,7 @@ function getBody(event) {
 }
 
 export const handler = async (event) => {
-  const { model_name, trials_json } = getBody(event);
+  const { model_name, trials_json, patient_json } = getBody(event);
 
   // ── Validate input ───────────────────────────────────────────────────────
   if (!model_name) {
@@ -106,24 +106,47 @@ export const handler = async (event) => {
     `  Summary     : ${t.description}`
   )).join("\n\n");
 
+  // ── Build patient context snippet ────────────────────────────────────────
+  let patientContext = "";
+  if (patient_json) {
+    try {
+      const p = typeof patient_json === "string" ? JSON.parse(patient_json) : patient_json;
+      const diagnosis = typeof p.diagnosis === "string"
+        ? p.diagnosis
+        : (p.diagnosis?.primary ?? null);
+      const age  = p.demographics?.age ?? p.age ?? null;
+      const sex  = p.demographics?.sex ?? p.sex ?? null;
+      const loc  = p.demographics?.location?.city ?? p.location?.city ?? null;
+      const meds = (p.currentMedications ?? []).map(m => m.name).filter(Boolean).slice(0, 4).join(", ");
+      const prefs = p.trialPreferences?.goals?.desiredOutcomes?.slice(0, 3).join(", ") ?? null;
+      const lines = [
+        diagnosis && `Condition: ${diagnosis}`,
+        (age || sex) && `Patient: ${[age && `${age}yo`, sex].filter(Boolean).join(", ")}`,
+        loc && `Location: ${loc}`,
+        meds && `Current medications: ${meds}`,
+        prefs && `Goals: ${prefs}`,
+      ].filter(Boolean);
+      if (lines.length) patientContext = lines.join("\n");
+    } catch { /* ignore parse errors */ }
+  }
+
   // ── System prompt ────────────────────────────────────────────────────────
-  const systemPrompt = `You are a clinical research analyst.
-You have been given data on ${trialCount} clinical trial(s).
-Your task is to write a short, clear, and professional description for each trial.
+  const systemPrompt = `You are a clinical trial advisor. A patient has been matched to ${trialCount} trial(s). Your job is to give them direct, personal recommendations — not descriptions.
 
 Rules:
-- No emojis.
-- Only use information explicitly present in the trial data provided.
-- For each trial write 2 to 3 sentences covering:
-    1. What the trial is investigating and why
-    2. Who is involved (sponsor, participants, location)
-    3. The current status and phase
-- After all individual trial descriptions, write a brief overall summary paragraph 
-  highlighting any patterns such as common conditions, phases, or statuses across the trials.
-- Keep each trial description concise and factual.`;
+- Address the patient directly ("This trial...", "Given your condition...", "You may want to prioritize...").
+- For each trial: one to two sentences on why it is or is not a strong fit for this patient specifically. Skip generic facts already visible in the listing.
+- End with a single closing sentence on what to do next (e.g. speak to their doctor, contact the sponsor). 
+- No emojis. No bullet points. No trial numbering. 
+- Do not warn the patient to discuss these options with their doctor. The UI makes this VERY clear.
+- Be terse. Total response under 220 words.`;
 
   // ── Call Featherless API ─────────────────────────────────────────────────
   try {
+    const userContent = patientContext
+      ? `Patient profile:\n${patientContext}\n\nMatched trials:\n${trialsText}\n\nProvide direct, terse recommendations for this patient.`
+      : `Matched trials:\n${trialsText}\n\nProvide direct, terse recommendations.`;
+
     const payload = JSON.stringify({
       model     : model_name,
       messages  : [
@@ -133,10 +156,10 @@ Rules:
         },
         {
           role   : "user",
-          content: `Please write a short description for each of the following ${trialCount} clinical trial(s):\n\n${trialsText}`,
+          content: userContent,
         },
       ],
-      max_tokens: 1500,
+      max_tokens: 350,
     });
 
     console.log(`Payload size: ${Buffer.byteLength(payload)} bytes`);
@@ -161,7 +184,7 @@ Rules:
       };
     }
 
-    const reply = data.choices[0].message.content;
+    const reply = data.choices[0].message.content + "\n\nTo proceed, I recommend discussing these options with your doctor to determine the best course of action and to see if any of these trials may be a suitable fit for you.";
     console.log("Reply:", reply);
 
     return {

@@ -134,7 +134,7 @@ export async function POST(request: Request) {
         const showRes = await fetch(showResultsUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model_name: showResultsModelName, trials_json: data.studies }),
+          body: JSON.stringify({ model_name: showResultsModelName, trials_json: data.studies, patient_json: patient }),
         });
         const showData = await showRes.json().catch(() => ({}));
         if (showRes.ok && showData.descriptions) {

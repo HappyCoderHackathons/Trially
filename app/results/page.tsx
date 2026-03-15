@@ -4,9 +4,7 @@ import { Suspense, useState, useEffect, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { TrialCard, Trial } from "@/components/trial-card"
 import { Pagination } from "@/components/pagination"
-import { BackgroundDecorations } from "@/components/background-decorations"
 import { ArrowLeft } from "lucide-react"
 
 interface ApiStudy {
@@ -20,6 +18,18 @@ interface ApiStudy {
   startDate: string | null
 }
 
+interface Trial {
+  id: string
+  name: string
+  description: string
+  location: string | null
+  sponsor: string | null
+  phase: string
+  enrollmentStatus: "Recruiting" | "Not Recruiting" | "Completed" | "Active"
+  startDate: string | null
+  participantsNeeded: number | null
+}
+
 function mapEnrollmentStatus(status: string | null): Trial["enrollmentStatus"] {
   switch (status) {
     case "RECRUITING": return "Recruiting"
@@ -31,15 +41,68 @@ function mapEnrollmentStatus(status: string | null): Trial["enrollmentStatus"] {
 }
 
 function normalizePhase(phase: string | null): string {
-  if (!phase) return "N/A"
+  if (!phase) return ""
   return phase.replace(/PHASE(\d)/gi, "$1")
 }
 
-const ITEMS_PER_PAGE = 4
+// Fully static class strings so Tailwind JIT can detect them
+const STATUS_CONFIG: Record<Trial["enrollmentStatus"], { dot: string; badge: string; accent: string }> = {
+  Recruiting:       { dot: "bg-emerald-500", badge: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800", accent: "border-l-emerald-500" },
+  "Not Recruiting": { dot: "bg-amber-400",   badge: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",             accent: "border-l-amber-400"   },
+  Active:           { dot: "bg-sky-500",      badge: "text-sky-700 bg-sky-50 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",                         accent: "border-l-sky-500"     },
+  Completed:        { dot: "bg-slate-400",    badge: "text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",             accent: "border-l-slate-400"   },
+}
+
+const ITEMS_PER_PAGE = 6
+
+function TrialResultCard({ trial }: { trial: Trial }) {
+  const cfg = STATUS_CONFIG[trial.enrollmentStatus]
+
+  const meta = [
+    trial.location,
+    trial.sponsor,
+    trial.participantsNeeded != null ? `${trial.participantsNeeded.toLocaleString()} participants` : null,
+    trial.startDate ? `Started ${trial.startDate}` : null,
+  ].filter(Boolean) as string[]
+
+  return (
+    <article
+      className={`bg-card border border-border border-l-4 ${cfg.accent} rounded-r-xl pl-5 pr-6 py-5 hover:shadow-sm transition-shadow duration-150`}
+    >
+      {/* Status badge */}
+      <div className="mb-3">
+        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+          {trial.enrollmentStatus}
+        </span>
+      </div>
+
+      {/* Title — serif for warmth and authority */}
+      <h3 className="font-serif text-[1.05rem] leading-snug text-foreground mb-2">
+        {trial.name}
+      </h3>
+
+      {/* Meta */}
+      {meta.length > 0 && (
+        <p className="text-[11px] tracking-wide text-muted-foreground mb-3">
+          {meta.join(" · ")}
+        </p>
+      )}
+
+      {/* Description */}
+      {trial.description && (
+        <p className="text-[13px] leading-[1.75] text-foreground/70">
+          {trial.description}
+        </p>
+      )}
+    </article>
+  )
+}
 
 function ResultsPageContent() {
   const searchParams = useSearchParams()
   const uuid = searchParams.get("uuid")
+
   const [currentPage, setCurrentPage] = useState(1)
   const [trials, setTrials] = useState<Trial[]>([])
   const [aiSummary, setAiSummary] = useState<string | null>(null)
@@ -63,20 +126,17 @@ function ResultsPageContent() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) {
-          setError(data.error)
-          return
-        }
+        if (data.error) { setError(data.error); return }
         const mapped: Trial[] = (data.studies ?? []).map((s: ApiStudy, i: number) => ({
           id: String(i + 1),
           name: s.title ?? "Untitled Trial",
           description: s.description ?? "",
-          location: s.location ?? "Location not specified",
-          sponsor: s.sponsor ?? "Unknown",
+          location: s.location,
+          sponsor: s.sponsor,
           phase: normalizePhase(s.phase),
           enrollmentStatus: mapEnrollmentStatus(s.status),
-          startDate: s.startDate ?? "Unknown",
-          participantsNeeded: s.participants ?? 0,
+          startDate: s.startDate,
+          participantsNeeded: s.participants,
         }))
         setTrials(mapped)
         setTotal(data.total ?? mapped.length)
@@ -88,7 +148,6 @@ function ResultsPageContent() {
   }, [uuid])
 
   const totalPages = Math.ceil(trials.length / ITEMS_PER_PAGE)
-
   const paginatedTrials = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE
     return trials.slice(start, start + ITEMS_PER_PAGE)
@@ -101,84 +160,85 @@ function ResultsPageContent() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
-      <BackgroundDecorations />
+      {/* Subtle background wash */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,hsl(var(--primary)/0.04),transparent)] pointer-events-none" />
 
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">Back</span>
-            </Link>
-
-            <Link href="/" className="flex items-center gap-3">
-              <Image
-                src="/trially-logo.jpg"
-                alt="Trially"
-                width={36}
-                height={36}
-                className="rounded-full"
-              />
-              <span className="text-xl font-light text-primary">Trially</span>
-            </Link>
-          </div>
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/60">
+        <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-5">
+          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Back">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/trially-logo.jpg" alt="Trially" width={26} height={26} className="rounded-full" />
+            <span className="text-base font-light tracking-wide text-primary">Trially</span>
+          </Link>
         </div>
       </header>
 
-      {/* Results Section */}
-      <section className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {!uuid ? (
-          <div className="text-center py-16">
-            <p className="text-lg text-muted-foreground">No patient session found. Please start from the home page.</p>
-            <Link href="/" className="mt-4 inline-block text-primary underline">Go home</Link>
-          </div>
-        ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground">Finding matching clinical trials…</p>
-          </div>
-        ) : error ? (
-          <div className="text-center py-16">
-            <p className="text-lg text-destructive">Error: {error}</p>
-            <Link href="/" className="mt-4 inline-block text-primary underline">Go home</Link>
-          </div>
-        ) : (
-          <>
-            <div className="mb-8">
-              <h1 className="text-2xl font-semibold text-foreground mb-2">
-                Matched Clinical Trials
-              </h1>
-              <p className="text-muted-foreground">
-                Found {total} clinical {total === 1 ? "trial" : "trials"} matching your profile
-              </p>
-            </div>
+      {/* Body */}
+      <div className="max-w-2xl mx-auto px-6 py-10 pb-20">
 
+        {/* — No UUID — */}
+        {!uuid && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+            <p className="text-sm text-muted-foreground">No session found.</p>
+            <Link href="/" className="text-xs text-primary underline underline-offset-4">Start a new search</Link>
+          </div>
+        )}
+
+        {/* — Loading — */}
+        {uuid && loading && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-muted-foreground tracking-wide">Searching clinical trials…</p>
+          </div>
+        )}
+
+        {/* — Error — */}
+        {uuid && !loading && error && (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+            <p className="text-sm text-destructive">{error}</p>
+            <Link href="/" className="text-xs text-primary underline underline-offset-4">Start a new search</Link>
+          </div>
+        )}
+
+        {/* — Results — */}
+        {uuid && !loading && !error && (
+          <div className="space-y-8">
+
+            {/* Patient profile */}
             {patientSummary && (
-              <div className="mb-8 p-5 rounded-2xl bg-card/80 border border-border backdrop-blur-sm">
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Your Profile Summary</h2>
-                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{patientSummary}</p>
-              </div>
+              <section className="rounded-xl border border-border bg-muted/30 px-5 py-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
+                  Your Profile
+                </p>
+                <p className="text-[13px] leading-[1.75] text-foreground/85">{patientSummary}</p>
+              </section>
             )}
 
+            {/* Count heading */}
+            <div className="flex items-baseline gap-2.5">
+              <span className="font-serif text-3xl text-foreground">{total}</span>
+              <span className="text-[13px] text-muted-foreground">
+                {total === 1 ? "trial matched" : "trials matched"}
+              </span>
+            </div>
+
+            {/* Trial cards */}
             {paginatedTrials.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+              <div className="space-y-3">
                 {paginatedTrials.map((trial) => (
-                  <TrialCard key={trial.id} trial={trial} />
+                  <TrialResultCard key={trial.id} trial={trial} />
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16">
-                <p className="text-lg text-muted-foreground">
-                  No matching trials found for your profile.
-                </p>
-              </div>
+              <p className="text-[13px] text-muted-foreground py-10 text-center">
+                No matching trials found for your profile.
+              </p>
             )}
 
+            {/* Pagination */}
             {totalPages > 1 && (
               <Pagination
                 currentPage={currentPage}
@@ -187,17 +247,19 @@ function ResultsPageContent() {
               />
             )}
 
+            {/* AI Analysis */}
             {aiSummary && (
-              <div className="mt-10 p-6 rounded-2xl bg-card/80 border border-border backdrop-blur-sm">
-                <h2 className="text-lg font-semibold text-foreground mb-3">AI Analysis</h2>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{aiSummary}</p>
-              </div>
+              <section className="rounded-xl border border-border bg-card/50 px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
+                  AI Analysis
+                </p>
+                <p className="text-[13px] leading-[1.8] text-foreground/75 whitespace-pre-wrap">{aiSummary}</p>
+              </section>
             )}
-          </>
-        )}
-      </section>
 
-      <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
+          </div>
+        )}
+      </div>
     </main>
   )
 }
@@ -205,8 +267,8 @@ function ResultsPageContent() {
 export default function ResultsPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex flex-col bg-background items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <main className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </main>
     }>
       <ResultsPageContent />

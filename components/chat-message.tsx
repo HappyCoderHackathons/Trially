@@ -1,3 +1,5 @@
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
 
 interface ChatMessageProps {
@@ -20,7 +22,16 @@ export function ChatMessage({ content, sender, timestamp }: ChatMessageProps) {
               : "bg-card border border-border text-card-foreground rounded-bl-md shadow-sm"
           )}
         >
-          {content}
+          {isUser ? (
+            content
+          ) : (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              // className="prose prose-sm max-w-none prose-p:mb-2 last:prose-p:mb-0 prose-ul:mb-2 prose-ol:mb-2"
+            >
+              {content}
+            </ReactMarkdown>
+          )}
         </div>
         {timestamp && (
           <span

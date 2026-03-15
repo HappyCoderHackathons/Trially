@@ -1,6 +1,6 @@
 import { DynamoDBClient, DeleteItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
-const TABLE_NAME = process.env.TRIALS_STAR_TABLE ?? "Saved_Trials";
+const TABLE_NAME = process.env.TRIALS_STAR_TABLE ?? "trially-starred-trials";
 const dynamo = new DynamoDBClient({ region: process.env.AWS_REGION ?? "us-east-1" });
 
 function getUserIdFromAuthHeader(authHeader?: string): string | null {

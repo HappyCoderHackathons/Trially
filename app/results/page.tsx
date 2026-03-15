@@ -3,9 +3,8 @@
 import { Suspense, useState, useEffect, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
 import { Pagination } from "@/components/pagination"
-import { ArrowLeft } from "lucide-react"
+import { AppHeader } from "@/components/app-header"
 import { TrialCard } from "@/components/trial-card"
 
 interface ApiStudy {
@@ -113,12 +112,15 @@ function ResultsPageContent() {
 
   const [currentPage, setCurrentPage] = useState(1)
   const [trials, setTrials] = useState<Trial[]>([])
+  const [rawStudies, setRawStudies] = useState<ApiStudy[]>([])
   const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [patientSummary, setPatientSummary] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
 
+  // Phase 1: fetch trials
   useEffect(() => {
     if (!uuid) return
     const controller = new AbortController()
@@ -126,6 +128,7 @@ function ResultsPageContent() {
     setLoading(true)
     setError(null)
     setTrials([])
+    setRawStudies([])
     setAiSummary(null)
     setPatientSummary(null)
 
@@ -138,7 +141,8 @@ function ResultsPageContent() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) { setError(data.error); setLoading(false); return }
-        const mapped: Trial[] = (data.studies ?? []).map((s: ApiStudy, i: number) => ({
+        const raw: ApiStudy[] = data.studies ?? []
+        const mapped: Trial[] = raw.map((s: ApiStudy, i: number) => ({
           id: String(i + 1),
           nctId: s.nctId ?? null,
           name: s.title ?? "Untitled Trial",
@@ -151,9 +155,9 @@ function ResultsPageContent() {
           participantsNeeded: s.participants,
         }))
         setTrials(mapped)
+        setRawStudies(raw)
         setTotal(data.total ?? mapped.length)
         setPatientSummary(data.patientSummary ?? null)
-        setAiSummary(data.aiSummary ?? null)
         setLoading(false)
       })
       .catch((err) => {
@@ -164,6 +168,33 @@ function ResultsPageContent() {
 
     return () => controller.abort()
   }, [uuid])
+
+  // Phase 2: fetch AI summary once trials are ready
+  useEffect(() => {
+    if (!uuid || rawStudies.length === 0) return
+    const controller = new AbortController()
+
+    setAiLoading(true)
+    setAiSummary(null)
+
+    fetch("/api/ai-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uuid, studies: rawStudies }),
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.aiSummary) setAiSummary(data.aiSummary)
+        setAiLoading(false)
+      })
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return
+        setAiLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [uuid, rawStudies])
 
   const totalPages = Math.ceil(trials.length / ITEMS_PER_PAGE)
   const paginatedTrials = useMemo(() => {
@@ -181,18 +212,11 @@ function ResultsPageContent() {
       {/* Subtle background wash */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,hsl(var(--primary)/0.04),transparent)] pointer-events-none" />
 
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/60">
-        <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-5">
-          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Back">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/trially-logo.jpg" alt="Trially" width={26} height={26} className="rounded-full" />
-            <span className="text-base font-light tracking-wide text-primary">Trially</span>
-          </Link>
-        </div>
-      </header>
+      <AppHeader
+        backLink={{ href: "/", label: "Back" }}
+        showDashboardLink
+        className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-border/60"
+      />
 
       {/* Body */}
       <div className="max-w-2xl mx-auto px-6 py-10 pb-20">
@@ -266,12 +290,19 @@ function ResultsPageContent() {
             )}
 
             {/* AI Analysis */}
-            {aiSummary && (
+            {(aiLoading || aiSummary) && (
               <section className="rounded-xl border border-border bg-card/50 px-5 py-5">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
                   AI Analysis
                 </p>
-                <p className="text-[13px] leading-[1.8] text-foreground/75 whitespace-pre-wrap">{aiSummary}</p>
+                {aiLoading ? (
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+                    <p className="text-[12px] text-muted-foreground">Generating analysis…</p>
+                  </div>
+                ) : (
+                  <p className="text-[13px] leading-[1.8] text-foreground/75 whitespace-pre-wrap">{aiSummary}</p>
+                )}
               </section>
             )}
 

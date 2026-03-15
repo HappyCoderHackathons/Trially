@@ -3,8 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft } from "lucide-react"
+import { AppHeader } from "@/components/app-header"
 
 interface PipelineStep {
   step_name: string
@@ -109,21 +108,14 @@ function TransparencyPageContent() {
     <main className="min-h-screen bg-background">
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,hsl(var(--primary)/0.04),transparent)] pointer-events-none" />
 
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/60">
-        <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-5">
-          <Link
-            href={uuid ? `/results?uuid=${encodeURIComponent(uuid)}` : "/"}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Back"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/trially-logo.jpg" alt="Trially" width={26} height={26} className="rounded-full" />
-            <span className="text-base font-light tracking-wide text-primary">Trially</span>
-          </Link>
-        </div>
-      </header>
+      <AppHeader
+        backLink={{
+          href: uuid ? `/results?uuid=${encodeURIComponent(uuid)}` : "/",
+          label: "Back",
+        }}
+        showDashboardLink
+        className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-border/60"
+      />
 
       <div className="max-w-2xl mx-auto px-6 py-10 pb-20">
         <div className="mb-8">

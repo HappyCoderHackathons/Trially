@@ -2,9 +2,7 @@
 
 import { Suspense, useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft } from "lucide-react"
+import { AppHeader } from "@/components/app-header"
 import { ChatMessage } from "@/components/chat-message"
 import { ChatInput } from "@/components/chat-input"
 import { BackgroundDecorations } from "@/components/background-decorations"
@@ -307,32 +305,11 @@ function ChatPageContent() {
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
       <BackgroundDecorations />
 
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
-            aria-label="Back to home"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </Link>
-          
-          <div className="flex items-center gap-3">
-            <Image
-              src="/trially-logo.jpg"
-              alt="Trially"
-              width={36}
-              height={36}
-              className="rounded-full"
-            />
-            <div>
-              <h1 className="text-lg font-medium text-foreground">Trially Assistant</h1>
-              <p className="text-xs text-muted-foreground">Finding the right trial for you</p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        backLink={{ href: "/", label: "Back to home" }}
+        showDashboardLink
+        className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-border"
+      />
 
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto">

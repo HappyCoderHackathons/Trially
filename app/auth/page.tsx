@@ -18,6 +18,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useToast } from "@/hooks/use-toast"
+import { AppHeader } from "@/components/app-header"
 import { BackgroundDecorations } from "@/components/background-decorations"
 import { TriallyLogo } from "@/components/trially-logo"
 import { signInWithEmail, signUpWithEmail } from "@/lib/cognito"
@@ -88,7 +89,10 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
+    <main className="min-h-screen flex flex-col bg-background">
+      <AppHeader showDashboardLink />
+
+      <div className="flex flex-1 flex-col items-center justify-center px-4">
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
       <BackgroundDecorations />
 
@@ -224,6 +228,7 @@ export default function AuthPage() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
+      </div>
     </main>
   )
 }
